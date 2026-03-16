@@ -134,6 +134,9 @@ model Challenge {
   id             String          @id @default(uuid())
   title          String
   description    String?
+  sport          String?
+  rewardPoints   Int             @default(0)
+  targetSessions Int             @default(1)
   status         ChallengeStatus @default(DRAFT)
   startsAt       DateTime?
   endsAt         DateTime?

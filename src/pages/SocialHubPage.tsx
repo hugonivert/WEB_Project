@@ -1,12 +1,211 @@
-import { useState } from "react";
+import { useState, useEffect, useCallback } from "react";
 import PageHeader from "../components/PageHeader";
 import SectionCard from "../components/SectionCard";
-import { friendActivities, leaderboard, weeklyMissions } from "../data/mockData";
+import {
+  fetchMissions,
+  fetchFeed,
+  fetchLeaderboard,
+  generateMissions,
+  toggleMissionComplete,
+  regenerateMission,
+  type MissionDto,
+  type FeedPostDto,
+  type LeaderboardEntryDto,
+  type SportType,
+} from "../api/social";
+import { fetchTestProfile } from "../api/planner";
 
 type SocialTab = "feed" | "missions" | "leaderboard";
 
+const SPORT_ICONS: Record<SportType, string> = {
+  RUNNING: "🏃",
+  GYM: "🏋️",
+  CYCLING: "🚴",
+  MOBILITY: "🧘",
+  SWIMMING: "🏊",
+  OTHER: "⚡",
+};
+
+const DEFAULT_CONTEXT = {
+  primarySport: "RUNNING" as SportType,
+  recentSessionCount: 6,
+  sessionsBySport: { RUNNING: 3, GYM: 2, CYCLING: 1 } as Partial<Record<SportType, number>>,
+  completedSessionCount: 5,
+};
+
+// ─── Progress circle component ───────────────────────────────────────────────
+
+function ProgressCircle({
+  completed,
+  loading,
+  onClick,
+}: {
+  completed: boolean;
+  loading: boolean;
+  onClick: () => void;
+}) {
+  const r = 16;
+  const circumference = 2 * Math.PI * r;
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={loading}
+      title={completed ? "Mark as not done" : "Mark as done"}
+      style={{
+        background: "none",
+        border: "none",
+        cursor: loading ? "wait" : "pointer",
+        padding: 0,
+        flexShrink: 0,
+      }}
+    >
+      <svg width="40" height="40" viewBox="0 0 40 40">
+        <circle cx="20" cy="20" r={r} fill="none" stroke="var(--color-border, #334155)" strokeWidth="3" />
+        <circle
+          cx="20"
+          cy="20"
+          r={r}
+          fill="none"
+          stroke={completed ? "#22c55e" : "#6366f1"}
+          strokeWidth="3"
+          strokeDasharray={circumference}
+          strokeDashoffset={completed ? 0 : circumference}
+          strokeLinecap="round"
+          transform="rotate(-90 20 20)"
+          style={{ transition: "stroke-dashoffset 0.45s ease, stroke 0.2s ease" }}
+        />
+        {completed && (
+          <text x="20" y="25" textAnchor="middle" fontSize="13" fill="#22c55e">✓</text>
+        )}
+      </svg>
+    </button>
+  );
+}
+
+// ─── Main page ───────────────────────────────────────────────────────────────
+
 export default function SocialHubPage() {
   const [activeTab, setActiveTab] = useState<SocialTab>("feed");
+  const [userId, setUserId] = useState<string | null>(null);
+
+  // Missions state
+  const [missions, setMissions] = useState<MissionDto[]>([]);
+  const [totalPoints, setTotalPoints] = useState(0);
+  const [loadingMissions, setLoadingMissions] = useState(false);
+  const [generatingAll, setGeneratingAll] = useState(false);
+  const [togglingId, setTogglingId] = useState<string | null>(null);
+  const [regeneratingId, setRegeneratingId] = useState<string | null>(null);
+  const [missionsError, setMissionsError] = useState<string | null>(null);
+
+  // Feed state
+  const [feedPosts, setFeedPosts] = useState<FeedPostDto[]>([]);
+  const [loadingFeed, setLoadingFeed] = useState(false);
+
+  // Leaderboard state
+  const [leaderboardEntries, setLeaderboardEntries] = useState<LeaderboardEntryDto[]>([]);
+  const [loadingLeaderboard, setLoadingLeaderboard] = useState(false);
+
+  // Load user profile once
+  useEffect(() => {
+    fetchTestProfile()
+      .then((profile) => setUserId(profile.id))
+      .catch(() => setUserId("11111111-1111-4111-8111-111111111111"));
+  }, []);
+
+  const loadMissions = useCallback(async (uid: string) => {
+    setLoadingMissions(true);
+    setMissionsError(null);
+    try {
+      const data = await fetchMissions(uid);
+      setMissions(data.missions);
+      setTotalPoints(data.totalPoints);
+    } catch {
+      setMissions([]);
+    } finally {
+      setLoadingMissions(false);
+    }
+  }, []);
+
+  const loadFeed = useCallback(async () => {
+    setLoadingFeed(true);
+    try {
+      const data = await fetchFeed();
+      setFeedPosts(data.posts);
+    } catch {
+      setFeedPosts([]);
+    } finally {
+      setLoadingFeed(false);
+    }
+  }, []);
+
+  const loadLeaderboard = useCallback(async () => {
+    setLoadingLeaderboard(true);
+    try {
+      const data = await fetchLeaderboard();
+      setLeaderboardEntries(data.entries);
+    } catch {
+      setLeaderboardEntries([]);
+    } finally {
+      setLoadingLeaderboard(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (activeTab === "missions" && userId) loadMissions(userId);
+    if (activeTab === "feed") loadFeed();
+    if (activeTab === "leaderboard") loadLeaderboard();
+  }, [activeTab, userId, loadMissions, loadFeed, loadLeaderboard]);
+
+  async function handleGenerate() {
+    if (!userId) return;
+    setGeneratingAll(true);
+    setMissionsError(null);
+    try {
+      const data = await generateMissions(userId, DEFAULT_CONTEXT);
+      setMissions(data.missions);
+      setTotalPoints(data.totalPoints);
+    } catch (err) {
+      setMissionsError(err instanceof Error ? err.message : "Generation failed");
+    } finally {
+      setGeneratingAll(false);
+    }
+  }
+
+  async function handleToggleComplete(mission: MissionDto) {
+    if (!userId) return;
+    setTogglingId(mission.id);
+    try {
+      const result = await toggleMissionComplete(mission.id, userId);
+      setMissions((prev) => prev.map((m) => (m.id === result.mission.id ? result.mission : m)));
+      setTotalPoints(result.totalPoints);
+      // Refresh feed and leaderboard to show the new post/updated ranking
+      if (result.mission.completed) {
+        loadFeed();
+        loadLeaderboard();
+      }
+    } catch {
+      // silently ignore
+    } finally {
+      setTogglingId(null);
+    }
+  }
+
+  async function handleRegenerate(mission: MissionDto) {
+    if (!userId) return;
+    setRegeneratingId(mission.id);
+    setMissionsError(null);
+    try {
+      const result = await regenerateMission(mission.id, userId, DEFAULT_CONTEXT);
+      setMissions((prev) => prev.map((m) => (m.id === mission.id ? result.mission : m)));
+    } catch (err) {
+      setMissionsError(err instanceof Error ? err.message : "Regeneration failed");
+    } finally {
+      setRegeneratingId(null);
+    }
+  }
+
+  const completedCount = missions.filter((m) => m.completed).length;
 
   return (
     <div className="route-page">
@@ -34,58 +233,176 @@ export default function SocialHubPage() {
         ))}
       </div>
 
-      {activeTab === "feed" ? (
+      {activeTab === "feed" && (
         <SectionCard
-          title="Friends feed"
-          description="Recent activity snapshots. Replace with API data, likes, comments or follows later."
+          title="Activity feed"
+          description="Missions completed by athletes on FitQuest."
         >
           <div className="stack-sm">
-            {friendActivities.map((item) => (
-              <div key={`${item.user}-${item.when}`} className="mini-panel">
-                <strong>{item.user}</strong>
-                <p>{item.activity}</p>
-                <p className="section-card-copy">{item.detail}</p>
-                <span className="owner-pill owner-pill-subtle">{item.when}</span>
-              </div>
-            ))}
+            {loadingFeed && (
+              <p className="section-card-copy">Loading feed…</p>
+            )}
+            {!loadingFeed && feedPosts.length === 0 && (
+              <p className="section-card-copy">
+                No activity yet. Complete missions to appear in the feed!
+              </p>
+            )}
+            {!loadingFeed && feedPosts.map((post) => {
+              let parsed: Record<string, unknown> = {};
+              try { parsed = JSON.parse(post.content) as Record<string, unknown>; } catch { /* */ }
+              const sport = (parsed["sport"] as SportType) ?? "OTHER";
+              const missionTitle = (parsed["missionTitle"] as string) ?? post.content;
+              const pts = parsed["rewardPoints"] as number | undefined;
+              const elapsed = Math.round((Date.now() - new Date(post.createdAt).getTime()) / 60000);
+              const when = elapsed < 1 ? "just now" : elapsed < 60 ? `${elapsed} min ago` : `${Math.round(elapsed / 60)} h ago`;
+              return (
+                <div key={post.id} className="mini-panel">
+                  <strong>{post.displayName}</strong>
+                  <p>{SPORT_ICONS[sport]} completed <em>{missionTitle}</em></p>
+                  {pts !== undefined && (
+                    <p className="section-card-copy">+{pts} pts earned</p>
+                  )}
+                  <span className="owner-pill owner-pill-subtle">{when}</span>
+                </div>
+              );
+            })}
           </div>
         </SectionCard>
-      ) : null}
+      )}
 
-      {activeTab === "missions" ? (
+      {activeTab === "missions" && (
         <SectionCard
           title="AI weekly missions"
-          description="Mission generation placeholder. This is where your AI planning module can later inject tailored challenges."
+          description={
+            missions.length > 0
+              ? `${completedCount} / ${missions.length} completed this week`
+              : "Your personalized challenges for the week, generated by AI."
+          }
         >
           <div className="stack-sm">
-            {weeklyMissions.map((mission) => (
-              <div key={mission.title} className="mini-panel">
-                <strong>{mission.title}</strong>
-                <p>{mission.progress}</p>
-                <p className="section-card-copy">Reward: {mission.reward}</p>
+            {/* Points banner */}
+            {totalPoints > 0 && (
+              <div className="mini-panel" style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
+                <span style={{ fontSize: "1.25rem" }}>🏆</span>
+                <div>
+                  <strong>{totalPoints} pts earned</strong>
+                  <p className="section-card-copy">Total from completed missions</p>
+                </div>
+              </div>
+            )}
+
+            {missionsError && (
+              <div className="mini-panel">
+                <p style={{ color: "#ef4444" }}>{missionsError}</p>
+              </div>
+            )}
+
+            {loadingMissions && (
+              <div className="mini-panel">
+                <p className="section-card-copy">Loading your missions…</p>
+              </div>
+            )}
+
+            {!loadingMissions && missions.length === 0 && !missionsError && (
+              <p className="section-card-copy">
+                No missions yet for this week. Generate your first set below.
+              </p>
+            )}
+
+            {/* Mission cards */}
+            {!loadingMissions && missions.map((mission) => (
+              <div
+                key={mission.id}
+                className="mini-panel"
+                style={{
+                  display: "flex",
+                  alignItems: "flex-start",
+                  gap: "0.875rem",
+                  opacity: mission.completed ? 0.65 : 1,
+                  transition: "opacity 0.3s ease",
+                }}
+              >
+                <ProgressCircle
+                  completed={mission.completed}
+                  loading={togglingId === mission.id}
+                  onClick={() => handleToggleComplete(mission)}
+                />
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <strong style={{ textDecoration: mission.completed ? "line-through" : "none" }}>
+                    {SPORT_ICONS[mission.sport as SportType] ?? "⚡"} {mission.title}
+                  </strong>
+                  <p>{mission.description}</p>
+                  <p className="section-card-copy">
+                    {mission.targetSessions} session{mission.targetSessions > 1 ? "s" : ""} ·{" "}
+                    <strong>+{mission.rewardPoints} pts</strong>
+                    {mission.completed && (
+                      <span style={{ color: "#22c55e", marginLeft: "0.5rem" }}>✓ Done</span>
+                    )}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => handleRegenerate(mission)}
+                  disabled={regeneratingId === mission.id || mission.completed}
+                  title="Regenerate this mission"
+                  style={{
+                    background: "none",
+                    border: "none",
+                    cursor: mission.completed ? "not-allowed" : "pointer",
+                    fontSize: "1rem",
+                    opacity: mission.completed ? 0.3 : 0.6,
+                    flexShrink: 0,
+                    padding: "0.25rem",
+                  }}
+                >
+                  {regeneratingId === mission.id ? "⏳" : "🔄"}
+                </button>
               </div>
             ))}
+
+            <button
+              type="button"
+              className="primary-button"
+              onClick={handleGenerate}
+              disabled={generatingAll}
+              style={{ marginTop: "0.5rem" }}
+            >
+              {generatingAll
+                ? "Generating…"
+                : missions.length > 0
+                  ? "Regenerate all missions"
+                  : "Generate my missions"}
+            </button>
           </div>
         </SectionCard>
-      ) : null}
+      )}
 
-      {activeTab === "leaderboard" ? (
+      {activeTab === "leaderboard" && (
         <SectionCard
-          title="Friends leaderboard"
-          description="Points earned through missions and activity streaks."
+          title="Leaderboard"
+          description="Points earned through completed missions. Updates in real time."
         >
           <div className="leaderboard-list">
-            {leaderboard.map((entry, index) => (
-              <div key={entry.name} className="leaderboard-row">
-                <span className="leaderboard-rank">#{index + 1}</span>
-                <strong>{entry.name}</strong>
+            {loadingLeaderboard && (
+              <p className="section-card-copy">Loading leaderboard…</p>
+            )}
+            {!loadingLeaderboard && leaderboardEntries.length === 0 && (
+              <p className="section-card-copy">
+                No points yet. Complete missions to appear here!
+              </p>
+            )}
+            {!loadingLeaderboard && leaderboardEntries.map((entry) => (
+              <div key={entry.userId} className="leaderboard-row">
+                <span className="leaderboard-rank">#{entry.rank}</span>
+                <strong>
+                  {entry.userId === userId ? `${entry.displayName} (you)` : entry.displayName}
+                </strong>
                 <span>{entry.points} pts</span>
-                <span className="section-card-copy">{entry.streak}</span>
               </div>
             ))}
           </div>
         </SectionCard>
-      ) : null}
+      )}
     </div>
   );
 }
