@@ -1,5 +1,6 @@
 import { FormEvent, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { AUTH_STORAGE_KEY } from "../lib/auth";
 
 type AuthMode = "login" | "signup";
 
@@ -10,7 +11,15 @@ interface FormState {
   confirmPassword: string;
 }
 
-const AUTH_STORAGE_KEY = "fitquest_auth";
+type AuthResponse = {
+  user: {
+    id: string;
+    email: string;
+    displayName: string;
+    avatarUrl?: string | null;
+  };
+  token: string;
+};
 
 const initialState: FormState = {
   displayName: "",
@@ -25,6 +34,7 @@ export default function LoginPage() {
   const [form, setForm] = useState<FormState>(initialState);
   const [error, setError] = useState<string>("");
   const [loading, setLoading] = useState<boolean>(false);
+  const [info, setInfo] = useState<string>("");
 
   const isSignup = mode === "signup";
 
@@ -39,6 +49,7 @@ export default function LoginPage() {
 
   const onChange = (key: keyof FormState, value: string) => {
     setError("");
+    setInfo("");
     setForm((prev) => ({ ...prev, [key]: value }));
   };
 
@@ -67,22 +78,69 @@ export default function LoginPage() {
 
     try {
       setLoading(true);
+      setInfo(isSignup ? "Création du compte…" : "Connexion…");
 
-      // Mock login/signup (on branchera le backend plus tard)
-      await new Promise((resolve) => setTimeout(resolve, 400));
+      const endpoint = isSignup ? "/api/auth/signup" : "/api/auth/login";
+      const body = isSignup
+        ? {
+            email: form.email,
+            password: form.password,
+            displayName: form.displayName,
+          }
+        : {
+            email: form.email,
+            password: form.password,
+          };
+
+      const response = await fetch(endpoint, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(body),
+      });
+
+      if (!response.ok) {
+        if (response.status === 401) {
+          setError("Email ou mot de passe incorrect.");
+          setInfo("");
+          return;
+        }
+        if (response.status === 409) {
+          setError("Cet email est déjà utilisé.");
+          setInfo("");
+          return;
+        }
+
+        const maybeJson = await response
+          .json()
+          .catch(() => ({ message: "Une erreur est survenue." }));
+        setError(maybeJson?.message ?? "Une erreur est survenue.");
+        setInfo("");
+        return;
+      }
+
+      const data = (await response.json()) as AuthResponse;
+
+      if (!data?.token || !data?.user?.email) {
+        setError("Réponse serveur invalide.");
+        return;
+      }
 
       localStorage.setItem(
         AUTH_STORAGE_KEY,
         JSON.stringify({
-          email: form.email,
-          displayName: form.displayName || "Athlète",
+          token: data.token,
+          user: data.user,
           loggedInAt: new Date().toISOString(),
         }),
       );
 
+      setInfo("");
       navigate("/planner");
     } catch {
       setError("Une erreur est survenue. Réessaie.");
+      setInfo("");
     } finally {
       setLoading(false);
     }
@@ -107,6 +165,7 @@ export default function LoginPage() {
           <button
             type="button"
             className={mode === "login" ? "primary-button" : "secondary-button"}
+            disabled={loading}
             onClick={() => {
               setMode("login");
               setError("");
@@ -119,6 +178,7 @@ export default function LoginPage() {
             className={
               mode === "signup" ? "primary-button" : "secondary-button"
             }
+            disabled={loading}
             onClick={() => {
               setMode("signup");
               setError("");
@@ -195,6 +255,12 @@ export default function LoginPage() {
             </div>
           ) : null}
 
+          {info ? (
+            <div className="user-badge" style={{ background: "#f0f9ff" }}>
+              <span style={{ color: "#0369a1" }}>{info}</span>
+            </div>
+          ) : null}
+
           <div className="login-actions">
             <button
               type="submit"
@@ -228,8 +294,8 @@ export default function LoginPage() {
         <div className="section-card login-notes">
           <h2 className="section-card-title">Note</h2>
           <p className="section-card-copy">
-            Pour l’instant, c’est un login <strong>mock</strong> (pas de
-            backend). Prochaine étape : brancher l’API et protéger les routes.
+            Login relié au backend via <code>/api/auth</code>. Si tu n’as pas
+            encore de compte, utilise “Créer un compte”.
           </p>
         </div>
       </div>

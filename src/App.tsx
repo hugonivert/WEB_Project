@@ -1,3 +1,4 @@
+import { useEffect, useState } from "react";
 import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
 import AppLayout from "./layout/AppLayout";
 import LoginPage from "./pages/LoginPage";
@@ -5,19 +6,31 @@ import PlannerPage from "./pages/PlannerPage";
 import PerformancePage from "./pages/PerformancePage";
 import SocialHubPage from "./pages/SocialHubPage";
 import AvatarPage from "./pages/AvatarPage";
-
-const AUTH_STORAGE_KEY = "fitquest_auth";
-
-function isLoggedIn(): boolean {
-  try {
-    return Boolean(localStorage.getItem(AUTH_STORAGE_KEY));
-  } catch {
-    return false;
-  }
-}
+import { AUTH_STORAGE_KEY, isLoggedIn } from "./lib/auth";
 
 export default function App() {
-  const loggedIn = isLoggedIn();
+  const [loggedIn, setLoggedIn] = useState<boolean>(() => isLoggedIn());
+
+  useEffect(() => {
+    const onStorage = (event: StorageEvent) => {
+      if (event.key === AUTH_STORAGE_KEY) {
+        setLoggedIn(isLoggedIn());
+      }
+    };
+
+    window.addEventListener("storage", onStorage);
+
+    // For updates coming from the same tab (storage event doesn't fire),
+    // we do a lightweight periodic check while the app is open.
+    const interval = window.setInterval(() => {
+      setLoggedIn(isLoggedIn());
+    }, 750);
+
+    return () => {
+      window.removeEventListener("storage", onStorage);
+      window.clearInterval(interval);
+    };
+  }, []);
 
   return (
     <BrowserRouter>
