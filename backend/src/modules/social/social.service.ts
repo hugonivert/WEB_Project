@@ -11,6 +11,9 @@ const GEMINI_URL =
 const AIMissionSchema = z.object({
   title: z.string(),
   description: z.string(),
+  sport: z.enum(["RUNNING", "GYM", "CYCLING", "MOBILITY", "SWIMMING", "OTHER"]).default("OTHER"),
+  rewardPoints: z.number().int().min(1).max(500).default(50),
+  targetSessions: z.number().int().min(1).max(7).default(1),
 });
 
 const AIMissionsResponseSchema = z.object({
@@ -31,13 +34,16 @@ export type MissionDto = {
   challengeId: string;
   title: string;
   description: string;
+  sport: string;
+  rewardPoints: number;
+  targetSessions: number;
   completed: boolean;
   completedAt: string | null;
 };
 
 // ─── In-memory fallback store ─────────────────────────────────────────────────
 
-type DevMission = MissionDto & { userId: string; weekStart: string };
+type DevMission = MissionDto & { userId: string; weekStart: string; sport: string; rewardPoints: number; targetSessions: number };
 
 export type FeedPostDto = {
   id: string;
@@ -202,6 +208,9 @@ export async function getUserMissions(userId: string): Promise<MissionDto[]> {
       challengeId: uc.challengeId,
       title: uc.challenge.title,
       description: uc.challenge.description ?? "",
+      sport: uc.challenge.sport ?? "OTHER",
+      rewardPoints: uc.challenge.rewardPoints,
+      targetSessions: uc.challenge.targetSessions,
       completed: uc.completedAt !== null,
       completedAt: uc.completedAt?.toISOString() ?? null,
     }));
@@ -247,6 +256,9 @@ export async function generateAndSaveMissions(
         data: {
           title: m.title,
           description: m.description,
+          sport: m.sport,
+          rewardPoints: m.rewardPoints,
+          targetSessions: m.targetSessions,
           status: "ACTIVE",
           startsAt: weekStart,
           endsAt: weekEnd,
@@ -260,6 +272,9 @@ export async function generateAndSaveMissions(
         challengeId: challenge.id,
         title: m.title,
         description: m.description,
+        sport: challenge.sport ?? "OTHER",
+        rewardPoints: challenge.rewardPoints,
+        targetSessions: challenge.targetSessions,
         completed: false,
         completedAt: null,
       });
@@ -280,6 +295,9 @@ export async function generateAndSaveMissions(
       challengeId: crypto.randomUUID(),
       title: m.title,
       description: m.description,
+      sport: "OTHER",
+      rewardPoints: 10,
+      targetSessions: 1,
       completed: false,
       completedAt: null,
     }));
@@ -294,13 +312,94 @@ export async function toggleMissionComplete(
   userChallengeId: string,
   userId: string,
 ): Promise<{ mission: MissionDto; totalPoints: number }> {
-  const mission = devMissionsStore.find(
-    (m) => m.id === userChallengeId && m.userId === userId,
-  );
-  if (!mission) throw new Error("Mission not found");
-  mission.completed = !mission.completed;
-  mission.completedAt = mission.completed ? new Date().toISOString() : null;
-  return { mission: { ...mission }, totalPoints: devRewardStore[userId] ?? 0 };
+  try {
+    const uc = await prisma.userChallenge.findFirst({
+      where: { id: userChallengeId, userId },
+      include: { challenge: true },
+    });
+    if (!uc) throw new Error("Mission not found");
+
+    const nowCompleted = uc.completedAt === null;
+    const completedAt = nowCompleted ? new Date() : null;
+
+    const updated = await prisma.userChallenge.update({
+      where: { id: userChallengeId },
+      data: { completedAt, progress: nowCompleted ? 1 : 0 },
+      include: { challenge: true },
+    });
+
+    const points = uc.challenge.rewardPoints || 10;
+
+    if (nowCompleted) {
+      await prisma.rewardEvent.create({
+        data: {
+          userId,
+          label: `Mission: ${uc.challenge.title}`,
+          source: "CHALLENGE",
+          points,
+        },
+      });
+      await prisma.socialPost.create({
+        data: {
+          userId,
+          visibility: "PUBLIC",
+          content: JSON.stringify({
+            type: "mission_complete",
+            missionTitle: uc.challenge.title,
+            sport: uc.challenge.sport ?? "OTHER",
+            points,
+          }),
+        },
+      });
+    } else {
+      await prisma.rewardEvent.deleteMany({
+        where: { userId, source: "CHALLENGE", label: `Mission: ${uc.challenge.title}` },
+      });
+    }
+
+    const totalPoints = await getTotalPoints(userId);
+    return {
+      mission: {
+        id: updated.id,
+        challengeId: updated.challengeId,
+        title: updated.challenge.title,
+        description: updated.challenge.description ?? "",
+        sport: updated.challenge.sport ?? "OTHER",
+        rewardPoints: updated.challenge.rewardPoints,
+        targetSessions: updated.challenge.targetSessions,
+        completed: updated.completedAt !== null,
+        completedAt: updated.completedAt?.toISOString() ?? null,
+      },
+      totalPoints,
+    };
+  } catch (error) {
+    if (!canFallback(error)) throw error;
+    // In-memory fallback
+    const mission = devMissionsStore.find(
+      (m) => m.id === userChallengeId && m.userId === userId,
+    );
+    if (!mission) throw new Error("Mission not found");
+    mission.completed = !mission.completed;
+    mission.completedAt = mission.completed ? new Date().toISOString() : null;
+    if (mission.completed) {
+      devRewardStore[userId] = (devRewardStore[userId] ?? 0) + 10;
+      devDisplayNames[userId] = devDisplayNames[userId] ?? "User";
+      devFeedStore.unshift({
+        id: crypto.randomUUID(),
+        userId,
+        displayName: devDisplayNames[userId],
+        content: JSON.stringify({ type: "mission_complete", missionTitle: mission.title, sport: "OTHER", points: 10 }),
+        sport: "OTHER",
+        createdAt: new Date().toISOString(),
+      });
+    } else {
+      devRewardStore[userId] = Math.max(0, (devRewardStore[userId] ?? 0) - 10);
+    }
+    return {
+      mission: { ...mission, sport: mission.sport ?? "OTHER", rewardPoints: mission.rewardPoints ?? 10, targetSessions: mission.targetSessions ?? 1 },
+      totalPoints: devRewardStore[userId] ?? 0,
+    };
+  }
 }
 
 export async function regenerateOneMission(
@@ -312,23 +411,65 @@ export async function regenerateOneMission(
   const weekStart = new Date(getWeekStart());
   const weekEnd = getWeekEnd();
 
-  const weekKey = getWeekStart();
-  const idx = devMissionsStore.findIndex(
-    (m) => m.id === userChallengeId && m.userId === userId,
-  );
-  if (idx === -1) throw new Error("Mission not found");
-  const replacement: DevMission = {
-    id: crypto.randomUUID(),
-    challengeId: crypto.randomUUID(),
-    userId,
-    weekStart: weekKey,
-    title: newMission.title,
-    description: newMission.description,
-    completed: false,
-    completedAt: null,
-  };
-  devMissionsStore.splice(idx, 1, replacement);
-  return { ...replacement };
+  try {
+    const uc = await prisma.userChallenge.findFirst({
+      where: { id: userChallengeId, userId },
+      select: { challengeId: true },
+    });
+    if (!uc) throw new Error("Mission not found");
+
+    await prisma.userChallenge.delete({ where: { id: userChallengeId } });
+    await prisma.challenge.delete({ where: { id: uc.challengeId } });
+
+    const challenge = await prisma.challenge.create({
+      data: {
+        title: newMission.title,
+        description: newMission.description,
+        sport: newMission.sport,
+        rewardPoints: newMission.rewardPoints,
+        targetSessions: newMission.targetSessions,
+        status: "ACTIVE",
+        startsAt: weekStart,
+        endsAt: weekEnd,
+      },
+    });
+    const newUc = await prisma.userChallenge.create({
+      data: { userId, challengeId: challenge.id, progress: 0 },
+    });
+    return {
+      id: newUc.id,
+      challengeId: challenge.id,
+      title: challenge.title,
+      description: challenge.description ?? "",
+      sport: challenge.sport ?? "OTHER",
+      rewardPoints: challenge.rewardPoints,
+      targetSessions: challenge.targetSessions,
+      completed: false,
+      completedAt: null,
+    };
+  } catch (error) {
+    if (!canFallback(error)) throw error;
+    const weekKey = getWeekStart();
+    const idx = devMissionsStore.findIndex(
+      (m) => m.id === userChallengeId && m.userId === userId,
+    );
+    if (idx === -1) throw new Error("Mission not found");
+    const replacement: DevMission = {
+      id: crypto.randomUUID(),
+      challengeId: crypto.randomUUID(),
+      userId,
+      weekStart: weekKey,
+      sport: "OTHER",
+      rewardPoints: 10,
+      targetSessions: 1,
+      title: newMission.title,
+      description: newMission.description,
+      completed: false,
+      completedAt: null,
+    };
+    devMissionsStore.splice(idx, 1, replacement);
+    return { ...replacement };
+  }
 }
 
 export async function getTotalPoints(userId: string): Promise<number> {
