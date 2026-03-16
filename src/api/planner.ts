@@ -12,6 +12,35 @@ export type PlannerProfile = {
   };
 };
 
+export type RunningCompletedData = {
+  distanceKm: number;
+  durationMinutes: number;
+  elevationGainM: number;
+};
+
+export type CyclingCompletedData = {
+  distanceKm: number;
+  durationMinutes: number;
+  elevationGainM: number;
+};
+
+export type GymCompletedData = {
+  exercisesCount: number;
+  totalSets: number;
+  totalLoadKg: number;
+};
+
+export type MobilityCompletedData = {
+  durationMinutes: number;
+  focusArea: string;
+};
+
+export type PlannerCompletedData =
+  | RunningCompletedData
+  | CyclingCompletedData
+  | GymCompletedData
+  | MobilityCompletedData;
+
 export type PlannerSessionDto = {
   id: string;
   userId: string;
@@ -22,6 +51,7 @@ export type PlannerSessionDto = {
   notes: string | null;
   location: string | null;
   status: "PLANNED" | "COMPLETED" | "CANCELED";
+  completedData: PlannerCompletedData | null;
   createdAt: string;
   updatedAt: string;
 };
@@ -35,6 +65,7 @@ export type PlannerSessionPayload = {
   notes?: string;
   location?: string;
   status?: "PLANNED" | "COMPLETED" | "CANCELED";
+  completedData?: PlannerCompletedData;
 };
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
