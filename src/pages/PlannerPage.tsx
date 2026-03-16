@@ -31,7 +31,6 @@ import {
   createPlannerSession,
   deletePlannerSession,
   fetchSessions,
-  fetchTestProfile,
   updatePlannerSession,
   type CyclingCompletedData,
   type GymCompletedData,
@@ -382,8 +381,26 @@ export default function PlannerPage() {
     async function loadPlannerData() {
       try {
         setIsLoading(true);
-        const nextProfile = await fetchTestProfile();
-        const nextSessions = await fetchSessions(nextProfile.id);
+
+        const session = readAuthSession();
+        if (!session?.user.id) {
+          navigate("/login");
+          return;
+        }
+
+        // Build a synthetic PlannerProfile from the auth session
+        const nextProfile: PlannerProfile = {
+          id: session.user.id,
+          email: session.user.email,
+          displayName: session.user.displayName,
+          avatarUrl: session.user.avatarUrl ?? null,
+          profile: {
+            primarySport: "RUNNING",
+            bio: null,
+            timezone: "Europe/Paris",
+          },
+        };
+        const nextSessions = await fetchSessions(session.user.id);
 
         if (!isMounted) {
           return;

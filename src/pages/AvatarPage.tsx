@@ -12,7 +12,8 @@ import {
   type AvatarInventoryDto,
   type AvatarProfileDto,
 } from "../api/avatar";
-import { fetchTestProfile, type PlannerProfile } from "../api/planner";
+import { readAuthSession } from "../lib/auth";
+import type { PlannerProfile } from "../api/planner";
 
 const rpmSubdomain = import.meta.env.VITE_RPM_SUBDOMAIN || "demo";
 
@@ -31,7 +32,25 @@ export default function AvatarPage() {
     async function loadAvatarPage() {
       try {
         setIsLoading(true);
-        const profile = await fetchTestProfile();
+
+        const session = readAuthSession();
+        if (!session?.user.id) {
+          setErrorMessage("Non connecté. Veuillez vous reconnecter.");
+          setIsLoading(false);
+          return;
+        }
+
+        const profile: PlannerProfile = {
+          id: session.user.id,
+          email: session.user.email,
+          displayName: session.user.displayName,
+          avatarUrl: session.user.avatarUrl ?? null,
+          profile: {
+            primarySport: "RUNNING",
+            bio: null,
+            timezone: "Europe/Paris",
+          },
+        };
 
         if (isCancelled) {
           return;
