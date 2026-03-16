@@ -8,14 +8,9 @@ const GEMINI_URL =
 
 // ─── Zod schemas ─────────────────────────────────────────────────────────────
 
-const SportEnum = z.enum(["RUNNING", "GYM", "CYCLING", "MOBILITY", "SWIMMING", "OTHER"]);
-
 const AIMissionSchema = z.object({
   title: z.string(),
   description: z.string(),
-  targetSessions: z.number().int().min(1).max(7),
-  sport: SportEnum,
-  rewardPoints: z.number().int().min(10).max(300),
 });
 
 const AIMissionsResponseSchema = z.object({
@@ -36,9 +31,6 @@ export type MissionDto = {
   challengeId: string;
   title: string;
   description: string;
-  sport: string;
-  rewardPoints: number;
-  targetSessions: number;
   completed: boolean;
   completedAt: string | null;
 };
@@ -91,6 +83,12 @@ const canFallback = (error: unknown) =>
 // ─── AI call ─────────────────────────────────────────────────────────────────
 
 async function callGemini(prompt: string): Promise<AIMission[]> {
+  if (!env.GEMINI_API_KEY) {
+    throw new Error(
+      "Missing GEMINI_API_KEY. Add it to backend .env to enable AI missions.",
+    );
+  }
+
   const response = await fetch(`${GEMINI_URL}?key=${env.GEMINI_API_KEY}`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -105,7 +103,7 @@ async function callGemini(prompt: string): Promise<AIMission[]> {
     throw new Error(`Gemini API error ${response.status}: ${errorText}`);
   }
 
-  const data = await response.json() as {
+  const data = (await response.json()) as {
     candidates: Array<{ content: { parts: Array<{ text: string }> } }>;
   };
 
@@ -192,7 +190,10 @@ export async function getUserMissions(userId: string): Promise<MissionDto[]> {
   const weekStart = new Date(getWeekStart());
   try {
     const userChallenges = await prisma.userChallenge.findMany({
-      where: { userId, challenge: { status: "ACTIVE", startsAt: { gte: weekStart } } },
+      where: {
+        userId,
+        challenge: { status: "ACTIVE", startsAt: { gte: weekStart } },
+      },
       include: { challenge: true },
       orderBy: { createdAt: "asc" },
     });
@@ -201,16 +202,15 @@ export async function getUserMissions(userId: string): Promise<MissionDto[]> {
       challengeId: uc.challengeId,
       title: uc.challenge.title,
       description: uc.challenge.description ?? "",
-      sport: uc.challenge.sport ?? "OTHER",
-      rewardPoints: uc.challenge.rewardPoints,
-      targetSessions: uc.challenge.targetSessions,
       completed: uc.completedAt !== null,
       completedAt: uc.completedAt?.toISOString() ?? null,
     }));
   } catch (error) {
     if (!canFallback(error)) throw error;
     const weekKey = getWeekStart();
-    return devMissionsStore.filter((m) => m.userId === userId && m.weekStart === weekKey);
+    return devMissionsStore.filter(
+      (m) => m.userId === userId && m.weekStart === weekKey,
+    );
   }
 }
 
@@ -225,12 +225,19 @@ export async function generateAndSaveMissions(
   try {
     // Delete existing missions for this week
     const existing = await prisma.userChallenge.findMany({
-      where: { userId, challenge: { status: "ACTIVE", startsAt: { gte: weekStart } } },
+      where: {
+        userId,
+        challenge: { status: "ACTIVE", startsAt: { gte: weekStart } },
+      },
       select: { id: true, challengeId: true },
     });
     if (existing.length > 0) {
-      await prisma.userChallenge.deleteMany({ where: { id: { in: existing.map((e) => e.id) } } });
-      await prisma.challenge.deleteMany({ where: { id: { in: existing.map((e) => e.challengeId) } } });
+      await prisma.userChallenge.deleteMany({
+        where: { id: { in: existing.map((e) => e.id) } },
+      });
+      await prisma.challenge.deleteMany({
+        where: { id: { in: existing.map((e) => e.challengeId) } },
+      });
     }
 
     // Create new challenges + user links
@@ -240,9 +247,6 @@ export async function generateAndSaveMissions(
         data: {
           title: m.title,
           description: m.description,
-          sport: m.sport,
-          rewardPoints: m.rewardPoints,
-          targetSessions: m.targetSessions,
           status: "ACTIVE",
           startsAt: weekStart,
           endsAt: weekEnd,
@@ -256,9 +260,6 @@ export async function generateAndSaveMissions(
         challengeId: challenge.id,
         title: m.title,
         description: m.description,
-        sport: m.sport,
-        rewardPoints: m.rewardPoints,
-        targetSessions: m.targetSessions,
         completed: false,
         completedAt: null,
       });
@@ -270,20 +271,21 @@ export async function generateAndSaveMissions(
     devMissionsStore.splice(
       0,
       devMissionsStore.length,
-      ...devMissionsStore.filter((m) => !(m.userId === userId && m.weekStart === weekKey)),
+      ...devMissionsStore.filter(
+        (m) => !(m.userId === userId && m.weekStart === weekKey),
+      ),
     );
     const created: MissionDto[] = missions.map((m) => ({
       id: crypto.randomUUID(),
       challengeId: crypto.randomUUID(),
       title: m.title,
       description: m.description,
-      sport: m.sport,
-      rewardPoints: m.rewardPoints,
-      targetSessions: m.targetSessions,
       completed: false,
       completedAt: null,
     }));
-    devMissionsStore.push(...created.map((m) => ({ ...m, userId, weekStart: weekKey })));
+    devMissionsStore.push(
+      ...created.map((m) => ({ ...m, userId, weekStart: weekKey })),
+    );
     return created;
   }
 }
@@ -292,103 +294,13 @@ export async function toggleMissionComplete(
   userChallengeId: string,
   userId: string,
 ): Promise<{ mission: MissionDto; totalPoints: number }> {
-  try {
-    const uc = await prisma.userChallenge.findFirst({
-      where: { id: userChallengeId, userId },
-      include: { challenge: true },
-    });
-    if (!uc) throw new Error("Mission not found");
-
-    const nowCompleted = uc.completedAt === null;
-    const updated = await prisma.userChallenge.update({
-      where: { id: userChallengeId },
-      data: {
-        completedAt: nowCompleted ? new Date() : null,
-        progress: nowCompleted ? uc.challenge.targetSessions : 0,
-      },
-      include: { challenge: true },
-    });
-
-    const user = await prisma.user.findUnique({
-      where: { id: userId },
-      select: { displayName: true },
-    });
-    const displayName = user?.displayName ?? "An athlete";
-    const sport = uc.challenge.sport ?? "OTHER";
-
-    if (nowCompleted) {
-      await prisma.rewardEvent.create({
-        data: {
-          userId,
-          label: `Mission completed: ${uc.challenge.title}`,
-          source: "mission",
-          points: uc.challenge.rewardPoints,
-        },
-      });
-      await prisma.socialPost.create({
-        data: {
-          userId,
-          content: JSON.stringify({
-            displayName,
-            missionTitle: uc.challenge.title,
-            sport,
-            rewardPoints: uc.challenge.rewardPoints,
-          }),
-          visibility: "PUBLIC",
-        },
-      });
-    } else {
-      await prisma.rewardEvent.deleteMany({
-        where: { userId, source: "mission", label: `Mission completed: ${uc.challenge.title}` },
-      });
-    }
-
-    const totalPoints = await prisma.rewardEvent.aggregate({
-      where: { userId },
-      _sum: { points: true },
-    });
-
-    return {
-      mission: {
-        id: updated.id,
-        challengeId: updated.challengeId,
-        title: updated.challenge.title,
-        description: updated.challenge.description ?? "",
-        sport: updated.challenge.sport ?? "OTHER",
-        rewardPoints: updated.challenge.rewardPoints,
-        targetSessions: updated.challenge.targetSessions,
-        completed: updated.completedAt !== null,
-        completedAt: updated.completedAt?.toISOString() ?? null,
-      },
-      totalPoints: totalPoints._sum.points ?? 0,
-    };
-  } catch (error) {
-    if (!canFallback(error)) throw error;
-    const mission = devMissionsStore.find((m) => m.id === userChallengeId && m.userId === userId);
-    if (!mission) throw new Error("Mission not found");
-    mission.completed = !mission.completed;
-    mission.completedAt = mission.completed ? new Date().toISOString() : null;
-    const displayName = devDisplayNames[userId] ?? "An athlete";
-    if (mission.completed) {
-      devRewardStore[userId] = (devRewardStore[userId] ?? 0) + mission.rewardPoints;
-      devFeedStore.unshift({
-        id: crypto.randomUUID(),
-        userId,
-        displayName,
-        content: JSON.stringify({
-          displayName,
-          missionTitle: mission.title,
-          sport: mission.sport,
-          rewardPoints: mission.rewardPoints,
-        }),
-        sport: mission.sport,
-        createdAt: new Date().toISOString(),
-      });
-    } else {
-      devRewardStore[userId] = Math.max(0, (devRewardStore[userId] ?? 0) - mission.rewardPoints);
-    }
-    return { mission: { ...mission }, totalPoints: devRewardStore[userId] ?? 0 };
-  }
+  const mission = devMissionsStore.find(
+    (m) => m.id === userChallengeId && m.userId === userId,
+  );
+  if (!mission) throw new Error("Mission not found");
+  mission.completed = !mission.completed;
+  mission.completedAt = mission.completed ? new Date().toISOString() : null;
+  return { mission: { ...mission }, totalPoints: devRewardStore[userId] ?? 0 };
 }
 
 export async function regenerateOneMission(
@@ -400,64 +312,23 @@ export async function regenerateOneMission(
   const weekStart = new Date(getWeekStart());
   const weekEnd = getWeekEnd();
 
-  try {
-    const uc = await prisma.userChallenge.findFirst({
-      where: { id: userChallengeId, userId },
-      select: { challengeId: true },
-    });
-    if (!uc) throw new Error("Mission not found");
-
-    await prisma.userChallenge.delete({ where: { id: userChallengeId } });
-    await prisma.challenge.delete({ where: { id: uc.challengeId } });
-
-    const challenge = await prisma.challenge.create({
-      data: {
-        title: newMission.title,
-        description: newMission.description,
-        sport: newMission.sport,
-        rewardPoints: newMission.rewardPoints,
-        targetSessions: newMission.targetSessions,
-        status: "ACTIVE",
-        startsAt: weekStart,
-        endsAt: weekEnd,
-      },
-    });
-    const newUc = await prisma.userChallenge.create({
-      data: { userId, challengeId: challenge.id, progress: 0 },
-    });
-
-    return {
-      id: newUc.id,
-      challengeId: challenge.id,
-      title: newMission.title,
-      description: newMission.description,
-      sport: newMission.sport,
-      rewardPoints: newMission.rewardPoints,
-      targetSessions: newMission.targetSessions,
-      completed: false,
-      completedAt: null,
-    };
-  } catch (error) {
-    if (!canFallback(error)) throw error;
-    const weekKey = getWeekStart();
-    const idx = devMissionsStore.findIndex((m) => m.id === userChallengeId && m.userId === userId);
-    if (idx === -1) throw new Error("Mission not found");
-    const replacement: DevMission = {
-      id: crypto.randomUUID(),
-      challengeId: crypto.randomUUID(),
-      userId,
-      weekStart: weekKey,
-      title: newMission.title,
-      description: newMission.description,
-      sport: newMission.sport,
-      rewardPoints: newMission.rewardPoints,
-      targetSessions: newMission.targetSessions,
-      completed: false,
-      completedAt: null,
-    };
-    devMissionsStore.splice(idx, 1, replacement);
-    return { ...replacement };
-  }
+  const weekKey = getWeekStart();
+  const idx = devMissionsStore.findIndex(
+    (m) => m.id === userChallengeId && m.userId === userId,
+  );
+  if (idx === -1) throw new Error("Mission not found");
+  const replacement: DevMission = {
+    id: crypto.randomUUID(),
+    challengeId: crypto.randomUUID(),
+    userId,
+    weekStart: weekKey,
+    title: newMission.title,
+    description: newMission.description,
+    completed: false,
+    completedAt: null,
+  };
+  devMissionsStore.splice(idx, 1, replacement);
+  return { ...replacement };
 }
 
 export async function getTotalPoints(userId: string): Promise<number> {
@@ -483,7 +354,11 @@ export async function getFeed(): Promise<FeedPostDto[]> {
     });
     return posts.map((p) => {
       let parsed: Record<string, unknown> = {};
-      try { parsed = JSON.parse(p.content) as Record<string, unknown>; } catch { /* not JSON */ }
+      try {
+        parsed = JSON.parse(p.content) as Record<string, unknown>;
+      } catch {
+        /* not JSON */
+      }
       return {
         id: p.id,
         userId: p.userId,
