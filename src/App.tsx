@@ -24,33 +24,55 @@ export default function App() {
       <Routes>
         <Route
           path="/login"
-          element={loggedIn ? <Navigate to="/planner" replace /> : <LoginPage />}
+          element={
+            loggedIn ? <Navigate to="/planner" replace /> : <LoginPage />
+          }
         />
         <Route element={<AppLayout />}>
           <Route
             index
-            element={loggedIn ? <Navigate to="/planner" replace /> : <Navigate to="/login" replace />}
+            element={
+              loggedIn ? (
+                <Navigate to="/planner" replace />
+              ) : (
+                <Navigate to="/login" replace />
+              )
+            }
           />
           <Route
             path="/planner"
-            element={loggedIn ? <PlannerPage /> : <Navigate to="/login" replace />}
+            element={
+              loggedIn ? <PlannerPage /> : <Navigate to="/login" replace />
+            }
           />
           <Route
             path="/performance"
-            element={loggedIn ? <PerformancePage /> : <Navigate to="/login" replace />}
+            element={
+              loggedIn ? <PerformancePage /> : <Navigate to="/login" replace />
+            }
           />
           <Route
             path="/social"
-            element={loggedIn ? <SocialHubPage /> : <Navigate to="/login" replace />}
+            element={
+              loggedIn ? <SocialHubPage /> : <Navigate to="/login" replace />
+            }
           />
           <Route
             path="/avatar"
-            element={loggedIn ? <AvatarPage /> : <Navigate to="/login" replace />}
+            element={
+              loggedIn ? <AvatarPage /> : <Navigate to="/login" replace />
+            }
           />
         </Route>
         <Route
           path="*"
-          element={loggedIn ? <Navigate to="/planner" replace /> : <Navigate to="/login" replace />}
+          element={
+            loggedIn ? (
+              <Navigate to="/planner" replace />
+            ) : (
+              <Navigate to="/login" replace />
+            )
+          }
         />
       </Routes>
     </BrowserRouter>
