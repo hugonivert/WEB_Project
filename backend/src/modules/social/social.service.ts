@@ -2,18 +2,19 @@ import { z } from "zod";
 import { PrismaClientKnownRequestError } from "@prisma/client/runtime/client";
 import { prisma } from "../../lib/prisma.js";
 import { env } from "../../config/env.js";
+import { DEV_PROFILE } from "../shared/dev-data.js";
 
 const GEMINI_URL =
   "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent";
 
-// ─── Zod schemas ─────────────────────────────────────────────────────────────
+const SportEnum = z.enum(["RUNNING", "GYM", "CYCLING", "MOBILITY", "SWIMMING", "OTHER"]);
 
 const AIMissionSchema = z.object({
   title: z.string(),
   description: z.string(),
-  sport: z.enum(["RUNNING", "GYM", "CYCLING", "MOBILITY", "SWIMMING", "OTHER"]).default("OTHER"),
-  rewardPoints: z.number().int().min(1).max(500).default(50),
-  targetSessions: z.number().int().min(1).max(7).default(1),
+  targetSessions: z.number().int().min(1).max(7),
+  sport: SportEnum,
+  rewardPoints: z.number().int().min(10).max(300),
 });
 
 const AIMissionsResponseSchema = z.object({
@@ -41,9 +42,7 @@ export type MissionDto = {
   completedAt: string | null;
 };
 
-// ─── In-memory fallback store ─────────────────────────────────────────────────
-
-type DevMission = MissionDto & { userId: string; weekStart: string; sport: string; rewardPoints: number; targetSessions: number };
+type DevMission = MissionDto & { userId: string; weekStart: string };
 
 export type FeedPostDto = {
   id: string;
@@ -61,11 +60,25 @@ export type LeaderboardEntryDto = {
   points: number;
 };
 
+export type FriendDto = {
+  id: string;
+  displayName: string;
+  avatarUrl: string | null;
+  friendshipCreatedAt: string;
+};
+
+export type FriendSuggestionDto = {
+  id: string;
+  displayName: string;
+  avatarUrl: string | null;
+  primarySport: string;
+  completedSessions: number;
+};
+
 const devMissionsStore: DevMission[] = [];
 const devRewardStore: Record<string, number> = {};
-const devFeedStore: FeedPostDto[] = [];
 const devDisplayNames: Record<string, string> = {
-  "11111111-1111-4111-8111-111111111111": "Planner Demo",
+  [DEV_PROFILE.id]: DEV_PROFILE.displayName,
 };
 
 function getWeekStart(): string {
@@ -84,15 +97,36 @@ function getWeekEnd(): Date {
 }
 
 const canFallback = (error: unknown) =>
-  error instanceof PrismaClientKnownRequestError && error.code === "P1001";
+  error instanceof PrismaClientKnownRequestError
+  && (error.code === "P1001" || error.code === "P2021");
 
-// ─── AI call ─────────────────────────────────────────────────────────────────
+const prismaFriendship = prisma as typeof prisma & {
+  friendship: {
+    findMany: (args: unknown) => Promise<Array<Record<string, unknown>>>;
+    upsert: (args: unknown) => Promise<unknown>;
+  };
+};
+
+function normalizeFriendPair(userId: string, friendId: string): { userId: string; friendId: string } {
+  return userId < friendId ? { userId, friendId } : { userId: friendId, friendId: userId };
+}
+
+async function getFriendIds(userId: string): Promise<string[]> {
+  const links = await prismaFriendship.friendship.findMany({
+    where: {
+      OR: [{ userId }, { friendId: userId }],
+    },
+    select: {
+      userId: true,
+      friendId: true,
+    },
+  }) as Array<{ userId: string; friendId: string }>;
+  return links.map((link) => (link.userId === userId ? link.friendId : link.userId));
+}
 
 async function callGemini(prompt: string): Promise<AIMission[]> {
   if (!env.GEMINI_API_KEY) {
-    throw new Error(
-      "Missing GEMINI_API_KEY. Add it to backend .env to enable AI missions.",
-    );
+    throw new Error("Missing GEMINI_API_KEY. Add it to backend .env to enable AI missions.");
   }
 
   const response = await fetch(`${GEMINI_URL}?key=${env.GEMINI_API_KEY}`, {
@@ -109,7 +143,7 @@ async function callGemini(prompt: string): Promise<AIMission[]> {
     throw new Error(`Gemini API error ${response.status}: ${errorText}`);
   }
 
-  const data = (await response.json()) as {
+  const data = await response.json() as {
     candidates: Array<{ content: { parts: Array<{ text: string }> } }>;
   };
 
@@ -161,18 +195,18 @@ Description style requirements:
 
 Rules:
 - Missions must be achievable in one week (targetSessions between 1 and 7)
-- If recentSessionCount is low, generate easier missions (1–2 sessions)
+- If recentSessionCount is low, generate easier missions (1-2 sessions)
 - Favor the primary sport for the Routine mission
 - Exploration mission should use a different or complementary sport
 - Recovery mission should use MOBILITY or light activity
 
 Reward points rules:
-- Routine mission: 40–90 points
-- Exploration mission: 70–140 points
-- Recovery mission: 30–70 points
+- Routine mission: 40-90 points
+- Exploration mission: 70-140 points
+- Recovery mission: 30-70 points
 
 Formatting rules:
-- Indicate the mission type in the title (e.g., "Routine Mission – Midweek Run").
+- Indicate the mission type in the title (e.g., "Routine Mission - Midweek Run").
 - Do not repeat the same sport more than twice.
 
 Respond ONLY with a valid JSON object in this exact format, no markdown, no explanation:
@@ -190,16 +224,123 @@ Respond ONLY with a valid JSON object in this exact format, no markdown, no expl
 }`;
 }
 
-// ─── Service functions ────────────────────────────────────────────────────────
+export async function getFriends(userId: string): Promise<FriendDto[]> {
+  const links = await prismaFriendship.friendship.findMany({
+    where: { OR: [{ userId }, { friendId: userId }] },
+    orderBy: { createdAt: "desc" },
+    include: {
+      user: { select: { id: true, displayName: true, avatarUrl: true } },
+      friend: { select: { id: true, displayName: true, avatarUrl: true } },
+    },
+  }) as Array<{
+    userId: string;
+    friendId: string;
+    createdAt: Date;
+    user: { id: string; displayName: string; avatarUrl: string | null };
+    friend: { id: string; displayName: string; avatarUrl: string | null };
+  }>;
+
+  return links
+    .map((link) => {
+      const friendUser = link.userId === userId ? link.friend : link.user;
+      return {
+        id: friendUser.id,
+        displayName: friendUser.displayName,
+        avatarUrl: friendUser.avatarUrl,
+        friendshipCreatedAt: link.createdAt.toISOString(),
+      };
+    })
+    .filter((friend) => friend.id !== DEV_PROFILE.id);
+}
+
+export async function getFriendSuggestions(userId: string): Promise<FriendSuggestionDto[]> {
+  const friendIds = await getFriendIds(userId);
+  const excluded = new Set([userId, ...friendIds, DEV_PROFILE.id]);
+
+  const users = await prisma.user.findMany({
+    where: {
+      id: { notIn: Array.from(excluded) },
+      passwordHash: { not: null },
+    },
+    take: 8,
+    include: {
+      profile: {
+        select: { primarySport: true },
+      },
+    },
+    orderBy: { createdAt: "desc" },
+  });
+
+  const completedByUser = await prisma.trainingSession.groupBy({
+    by: ["userId"],
+    where: {
+      userId: { in: users.map((u) => u.id) },
+      status: "COMPLETED",
+    },
+    _count: { _all: true },
+  });
+
+  const completedMap = Object.fromEntries(completedByUser.map((g) => [g.userId, g._count._all]));
+
+  return users
+    .map((user) => ({
+      id: user.id,
+      displayName: user.displayName,
+      avatarUrl: user.avatarUrl,
+      primarySport: user.profile?.primarySport ?? "OTHER",
+      completedSessions: completedMap[user.id] ?? 0,
+    }))
+    .sort((a, b) => b.completedSessions - a.completedSessions)
+    .slice(0, 5);
+}
+
+export async function addFriend(userId: string, friendId: string): Promise<FriendDto> {
+  if (userId === friendId) {
+    throw new Error("You cannot add yourself as a friend");
+  }
+
+  const pair = normalizeFriendPair(userId, friendId);
+
+  if (friendId === DEV_PROFILE.id) {
+    throw new Error("Demo account cannot be added as a friend");
+  }
+
+  await prismaFriendship.friendship.upsert({
+    where: {
+      userId_friendId: {
+        userId: pair.userId,
+        friendId: pair.friendId,
+      },
+    },
+    update: {},
+    create: {
+      userId: pair.userId,
+      friendId: pair.friendId,
+    },
+  });
+
+  const friend = await prisma.user.findUnique({
+    where: { id: friendId },
+    select: { id: true, displayName: true, avatarUrl: true },
+  });
+
+  if (!friend) {
+    throw new Error("Friend user not found");
+  }
+
+  return {
+    id: friend.id,
+    displayName: friend.displayName,
+    avatarUrl: friend.avatarUrl,
+    friendshipCreatedAt: new Date().toISOString(),
+  };
+}
 
 export async function getUserMissions(userId: string): Promise<MissionDto[]> {
   const weekStart = new Date(getWeekStart());
   try {
     const userChallenges = await prisma.userChallenge.findMany({
-      where: {
-        userId,
-        challenge: { status: "ACTIVE", startsAt: { gte: weekStart } },
-      },
+      where: { userId, challenge: { status: "ACTIVE", startsAt: { gte: weekStart } } },
       include: { challenge: true },
       orderBy: { createdAt: "asc" },
     });
@@ -217,9 +358,7 @@ export async function getUserMissions(userId: string): Promise<MissionDto[]> {
   } catch (error) {
     if (!canFallback(error)) throw error;
     const weekKey = getWeekStart();
-    return devMissionsStore.filter(
-      (m) => m.userId === userId && m.weekStart === weekKey,
-    );
+    return devMissionsStore.filter((m) => m.userId === userId && m.weekStart === weekKey);
   }
 }
 
@@ -232,24 +371,15 @@ export async function generateAndSaveMissions(
   const weekEnd = getWeekEnd();
 
   try {
-    // Delete existing missions for this week
     const existing = await prisma.userChallenge.findMany({
-      where: {
-        userId,
-        challenge: { status: "ACTIVE", startsAt: { gte: weekStart } },
-      },
+      where: { userId, challenge: { status: "ACTIVE", startsAt: { gte: weekStart } } },
       select: { id: true, challengeId: true },
     });
     if (existing.length > 0) {
-      await prisma.userChallenge.deleteMany({
-        where: { id: { in: existing.map((e) => e.id) } },
-      });
-      await prisma.challenge.deleteMany({
-        where: { id: { in: existing.map((e) => e.challengeId) } },
-      });
+      await prisma.userChallenge.deleteMany({ where: { id: { in: existing.map((e) => e.id) } } });
+      await prisma.challenge.deleteMany({ where: { id: { in: existing.map((e) => e.challengeId) } } });
     }
 
-    // Create new challenges + user links
     const created: MissionDto[] = [];
     for (const m of missions) {
       const challenge = await prisma.challenge.create({
@@ -272,9 +402,9 @@ export async function generateAndSaveMissions(
         challengeId: challenge.id,
         title: m.title,
         description: m.description,
-        sport: challenge.sport ?? "OTHER",
-        rewardPoints: challenge.rewardPoints,
-        targetSessions: challenge.targetSessions,
+        sport: m.sport,
+        rewardPoints: m.rewardPoints,
+        targetSessions: m.targetSessions,
         completed: false,
         completedAt: null,
       });
@@ -286,24 +416,20 @@ export async function generateAndSaveMissions(
     devMissionsStore.splice(
       0,
       devMissionsStore.length,
-      ...devMissionsStore.filter(
-        (m) => !(m.userId === userId && m.weekStart === weekKey),
-      ),
+      ...devMissionsStore.filter((m) => !(m.userId === userId && m.weekStart === weekKey)),
     );
     const created: MissionDto[] = missions.map((m) => ({
       id: crypto.randomUUID(),
       challengeId: crypto.randomUUID(),
       title: m.title,
       description: m.description,
-      sport: "OTHER",
-      rewardPoints: 10,
-      targetSessions: 1,
+      sport: m.sport,
+      rewardPoints: m.rewardPoints,
+      targetSessions: m.targetSessions,
       completed: false,
       completedAt: null,
     }));
-    devMissionsStore.push(
-      ...created.map((m) => ({ ...m, userId, weekStart: weekKey })),
-    );
+    devMissionsStore.push(...created.map((m) => ({ ...m, userId, weekStart: weekKey })));
     return created;
   }
 }
@@ -320,23 +446,22 @@ export async function toggleMissionComplete(
     if (!uc) throw new Error("Mission not found");
 
     const nowCompleted = uc.completedAt === null;
-    const completedAt = nowCompleted ? new Date() : null;
-
     const updated = await prisma.userChallenge.update({
       where: { id: userChallengeId },
-      data: { completedAt, progress: nowCompleted ? 1 : 0 },
+      data: {
+        completedAt: nowCompleted ? new Date() : null,
+        progress: nowCompleted ? uc.challenge.targetSessions : 0,
+      },
       include: { challenge: true },
     });
-
-    const points = uc.challenge.rewardPoints || 10;
 
     if (nowCompleted) {
       await prisma.rewardEvent.create({
         data: {
           userId,
-          label: `Mission: ${uc.challenge.title}`,
-          source: "CHALLENGE",
-          points,
+          label: `Mission completed: ${uc.challenge.title}`,
+          source: "mission",
+          points: uc.challenge.rewardPoints,
         },
       });
       await prisma.socialPost.create({
@@ -344,20 +469,32 @@ export async function toggleMissionComplete(
           userId,
           visibility: "PUBLIC",
           content: JSON.stringify({
-            type: "mission_complete",
+            type: "mission_completed",
             missionTitle: uc.challenge.title,
             sport: uc.challenge.sport ?? "OTHER",
-            points,
+            rewardPoints: uc.challenge.rewardPoints,
           }),
         },
       });
     } else {
       await prisma.rewardEvent.deleteMany({
-        where: { userId, source: "CHALLENGE", label: `Mission: ${uc.challenge.title}` },
+        where: { userId, source: "mission", label: `Mission completed: ${uc.challenge.title}` },
+      });
+      await prisma.socialPost.deleteMany({
+        where: {
+          userId,
+          content: {
+            contains: `"type":"mission_completed","missionTitle":"${uc.challenge.title}`,
+          },
+        },
       });
     }
 
-    const totalPoints = await getTotalPoints(userId);
+    const totalPoints = await prisma.rewardEvent.aggregate({
+      where: { userId },
+      _sum: { points: true },
+    });
+
     return {
       mission: {
         id: updated.id,
@@ -370,35 +507,20 @@ export async function toggleMissionComplete(
         completed: updated.completedAt !== null,
         completedAt: updated.completedAt?.toISOString() ?? null,
       },
-      totalPoints,
+      totalPoints: totalPoints._sum.points ?? 0,
     };
   } catch (error) {
     if (!canFallback(error)) throw error;
-    // In-memory fallback
-    const mission = devMissionsStore.find(
-      (m) => m.id === userChallengeId && m.userId === userId,
-    );
+    const mission = devMissionsStore.find((m) => m.id === userChallengeId && m.userId === userId);
     if (!mission) throw new Error("Mission not found");
     mission.completed = !mission.completed;
     mission.completedAt = mission.completed ? new Date().toISOString() : null;
     if (mission.completed) {
-      devRewardStore[userId] = (devRewardStore[userId] ?? 0) + 10;
-      devDisplayNames[userId] = devDisplayNames[userId] ?? "User";
-      devFeedStore.unshift({
-        id: crypto.randomUUID(),
-        userId,
-        displayName: devDisplayNames[userId],
-        content: JSON.stringify({ type: "mission_complete", missionTitle: mission.title, sport: "OTHER", points: 10 }),
-        sport: "OTHER",
-        createdAt: new Date().toISOString(),
-      });
+      devRewardStore[userId] = (devRewardStore[userId] ?? 0) + mission.rewardPoints;
     } else {
-      devRewardStore[userId] = Math.max(0, (devRewardStore[userId] ?? 0) - 10);
+      devRewardStore[userId] = Math.max(0, (devRewardStore[userId] ?? 0) - mission.rewardPoints);
     }
-    return {
-      mission: { ...mission, sport: mission.sport ?? "OTHER", rewardPoints: mission.rewardPoints ?? 10, targetSessions: mission.targetSessions ?? 1 },
-      totalPoints: devRewardStore[userId] ?? 0,
-    };
+    return { mission: { ...mission }, totalPoints: devRewardStore[userId] ?? 0 };
   }
 }
 
@@ -436,34 +558,33 @@ export async function regenerateOneMission(
     const newUc = await prisma.userChallenge.create({
       data: { userId, challengeId: challenge.id, progress: 0 },
     });
+
     return {
       id: newUc.id,
       challengeId: challenge.id,
-      title: challenge.title,
-      description: challenge.description ?? "",
-      sport: challenge.sport ?? "OTHER",
-      rewardPoints: challenge.rewardPoints,
-      targetSessions: challenge.targetSessions,
+      title: newMission.title,
+      description: newMission.description,
+      sport: newMission.sport,
+      rewardPoints: newMission.rewardPoints,
+      targetSessions: newMission.targetSessions,
       completed: false,
       completedAt: null,
     };
   } catch (error) {
     if (!canFallback(error)) throw error;
     const weekKey = getWeekStart();
-    const idx = devMissionsStore.findIndex(
-      (m) => m.id === userChallengeId && m.userId === userId,
-    );
+    const idx = devMissionsStore.findIndex((m) => m.id === userChallengeId && m.userId === userId);
     if (idx === -1) throw new Error("Mission not found");
     const replacement: DevMission = {
       id: crypto.randomUUID(),
       challengeId: crypto.randomUUID(),
       userId,
       weekStart: weekKey,
-      sport: "OTHER",
-      rewardPoints: 10,
-      targetSessions: 1,
       title: newMission.title,
       description: newMission.description,
+      sport: newMission.sport,
+      rewardPoints: newMission.rewardPoints,
+      targetSessions: newMission.targetSessions,
       completed: false,
       completedAt: null,
     };
@@ -485,34 +606,75 @@ export async function getTotalPoints(userId: string): Promise<number> {
   }
 }
 
-export async function getFeed(): Promise<FeedPostDto[]> {
-  try {
-    const posts = await prisma.socialPost.findMany({
-      where: { visibility: "PUBLIC" },
-      orderBy: { createdAt: "desc" },
-      take: 30,
-      include: { user: { select: { displayName: true } } },
-    });
-    return posts.map((p) => {
-      let parsed: Record<string, unknown> = {};
-      try {
-        parsed = JSON.parse(p.content) as Record<string, unknown>;
-      } catch {
-        /* not JSON */
-      }
-      return {
-        id: p.id,
-        userId: p.userId,
-        displayName: p.user.displayName,
-        content: p.content,
-        sport: (parsed["sport"] as string) ?? "OTHER",
-        createdAt: p.createdAt.toISOString(),
-      };
-    });
-  } catch (error) {
-    if (!canFallback(error)) throw error;
-    return [...devFeedStore];
-  }
+export async function getFeed(userId: string): Promise<FeedPostDto[]> {
+  const friendIds = (await getFriendIds(userId)).filter((id) => id !== DEV_PROFILE.id);
+  if (friendIds.length === 0) return [];
+
+  const sessions = await prisma.trainingSession.findMany({
+    where: {
+      userId: { in: friendIds },
+      status: "COMPLETED",
+    },
+    orderBy: { updatedAt: "desc" },
+    take: 30,
+    include: {
+      user: {
+        select: { displayName: true },
+      },
+    },
+  });
+
+  const completedMissions = await prisma.userChallenge.findMany({
+    where: {
+      userId: { in: friendIds },
+      completedAt: { not: null },
+    },
+    orderBy: { completedAt: "desc" },
+    take: 30,
+    include: {
+      challenge: {
+        select: {
+          title: true,
+          sport: true,
+          rewardPoints: true,
+        },
+      },
+      user: {
+        select: { displayName: true },
+      },
+    },
+  });
+
+  const sessionFeed: FeedPostDto[] = sessions.map((session) => ({
+    id: session.id,
+    userId: session.userId,
+    displayName: session.user.displayName,
+    content: JSON.stringify({
+      type: "session_completed",
+      sessionTitle: session.title,
+      sport: session.sport,
+    }),
+    sport: session.sport,
+    createdAt: session.updatedAt.toISOString(),
+  }));
+
+  const missionFeed: FeedPostDto[] = completedMissions.map((mission) => ({
+    id: `mission-${mission.id}`,
+    userId: mission.userId,
+    displayName: mission.user.displayName,
+    content: JSON.stringify({
+      type: "mission_completed",
+      missionTitle: mission.challenge.title,
+      sport: mission.challenge.sport ?? "OTHER",
+      rewardPoints: mission.challenge.rewardPoints,
+    }),
+    sport: mission.challenge.sport ?? "OTHER",
+    createdAt: mission.completedAt?.toISOString() ?? mission.createdAt.toISOString(),
+  }));
+
+  return [...sessionFeed, ...missionFeed]
+    .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+    .slice(0, 30);
 }
 
 export async function getLeaderboard(): Promise<LeaderboardEntryDto[]> {

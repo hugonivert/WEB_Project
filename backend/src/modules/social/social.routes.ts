@@ -1,6 +1,9 @@
 import { Router } from "express";
 import { z } from "zod";
 import {
+  getFriends,
+  getFriendSuggestions,
+  addFriend,
   getUserMissions,
   generateAndSaveMissions,
   toggleMissionComplete,
@@ -12,14 +15,55 @@ import {
 
 export const socialRouter = Router();
 
-// GET /api/social/posts
-socialRouter.get("/posts", async (_request, response) => {
+// GET /api/social/posts?userId=...
+socialRouter.get("/posts", async (request, response) => {
+  const userId = request.query["userId"] as string;
+  if (!userId) { response.status(400).json({ error: "userId is required" }); return; }
   try {
-    const posts = await getFeed();
+    const posts = await getFeed(userId);
     response.json({ posts });
   } catch (error) {
     console.error("[social] GET /posts failed:", error);
     response.status(500).json({ error: "Failed to load feed" });
+  }
+});
+
+// GET /api/social/friends?userId=...
+socialRouter.get("/friends", async (request, response) => {
+  const userId = request.query["userId"] as string;
+  if (!userId) { response.status(400).json({ error: "userId is required" }); return; }
+  try {
+    const friends = await getFriends(userId);
+    response.json({ friends });
+  } catch (error) {
+    console.error("[social] GET /friends failed:", error);
+    response.status(500).json({ error: "Failed to load friends" });
+  }
+});
+
+// GET /api/social/friend-suggestions?userId=...
+socialRouter.get("/friend-suggestions", async (request, response) => {
+  const userId = request.query["userId"] as string;
+  if (!userId) { response.status(400).json({ error: "userId is required" }); return; }
+  try {
+    const suggestions = await getFriendSuggestions(userId);
+    response.json({ suggestions });
+  } catch (error) {
+    console.error("[social] GET /friend-suggestions failed:", error);
+    response.status(500).json({ error: "Failed to load friend suggestions" });
+  }
+});
+
+// POST /api/social/friends
+socialRouter.post("/friends", async (request, response) => {
+  const body = z.object({ userId: z.string(), friendId: z.string() }).safeParse(request.body);
+  if (!body.success) { response.status(400).json({ error: body.error.flatten() }); return; }
+  try {
+    const friend = await addFriend(body.data.userId, body.data.friendId);
+    response.status(201).json({ friend });
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : "Failed to add friend";
+    response.status(400).json({ error: detail });
   }
 });
 

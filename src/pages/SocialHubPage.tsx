@@ -4,18 +4,23 @@ import SectionCard from "../components/SectionCard";
 import {
   fetchMissions,
   fetchFeed,
+  fetchFriends,
+  fetchFriendSuggestions,
+  addFriend,
   fetchLeaderboard,
   generateMissions,
   toggleMissionComplete,
   regenerateMission,
   type MissionDto,
   type FeedPostDto,
+  type FriendDto,
+  type FriendSuggestionDto,
   type LeaderboardEntryDto,
   type SportType,
 } from "../api/social";
 import { readAuthSession } from "../lib/auth";
 
-type SocialTab = "feed" | "missions" | "leaderboard";
+type SocialTab = "feed" | "friends" | "missions" | "leaderboard";
 
 const SPORT_ICONS: Record<SportType, string> = {
   RUNNING: "🏃",
@@ -101,6 +106,10 @@ export default function SocialHubPage() {
   // Feed state
   const [feedPosts, setFeedPosts] = useState<FeedPostDto[]>([]);
   const [loadingFeed, setLoadingFeed] = useState(false);
+  const [friends, setFriends] = useState<FriendDto[]>([]);
+  const [friendSuggestions, setFriendSuggestions] = useState<FriendSuggestionDto[]>([]);
+  const [loadingFriends, setLoadingFriends] = useState(false);
+  const [addingFriendId, setAddingFriendId] = useState<string | null>(null);
 
   // Leaderboard state
   const [leaderboardEntries, setLeaderboardEntries] = useState<LeaderboardEntryDto[]>([]);
@@ -128,15 +137,32 @@ export default function SocialHubPage() {
     }
   }, []);
 
-  const loadFeed = useCallback(async () => {
+  const loadFeed = useCallback(async (uid: string) => {
     setLoadingFeed(true);
     try {
-      const data = await fetchFeed();
+      const data = await fetchFeed(uid);
       setFeedPosts(data.posts);
     } catch {
       setFeedPosts([]);
     } finally {
       setLoadingFeed(false);
+    }
+  }, []);
+
+  const loadFriends = useCallback(async (uid: string) => {
+    setLoadingFriends(true);
+    try {
+      const [friendData, suggestionData] = await Promise.all([
+        fetchFriends(uid),
+        fetchFriendSuggestions(uid),
+      ]);
+      setFriends(friendData.friends);
+      setFriendSuggestions(suggestionData.suggestions);
+    } catch {
+      setFriends([]);
+      setFriendSuggestions([]);
+    } finally {
+      setLoadingFriends(false);
     }
   }, []);
 
@@ -154,9 +180,14 @@ export default function SocialHubPage() {
 
   useEffect(() => {
     if (activeTab === "missions" && userId) loadMissions(userId);
-    if (activeTab === "feed") loadFeed();
+    if (activeTab === "feed" && userId) {
+      loadFeed(userId);
+    }
+    if (activeTab === "friends" && userId) {
+      loadFriends(userId);
+    }
     if (activeTab === "leaderboard") loadLeaderboard();
-  }, [activeTab, userId, loadMissions, loadFeed, loadLeaderboard]);
+  }, [activeTab, userId, loadMissions, loadFeed, loadFriends, loadLeaderboard]);
 
   async function handleGenerate() {
     if (!userId) return;
@@ -180,9 +211,8 @@ export default function SocialHubPage() {
       const result = await toggleMissionComplete(mission.id, userId);
       setMissions((prev) => prev.map((m) => (m.id === result.mission.id ? result.mission : m)));
       setTotalPoints(result.totalPoints);
-      // Refresh feed and leaderboard to show the new post/updated ranking
+      // Refresh leaderboard when points change.
       if (result.mission.completed) {
-        loadFeed();
         loadLeaderboard();
       }
     } catch {
@@ -206,20 +236,32 @@ export default function SocialHubPage() {
     }
   }
 
+  async function handleAddFriend(friendId: string) {
+    if (!userId) return;
+    setAddingFriendId(friendId);
+    try {
+      await addFriend(userId, friendId);
+      await Promise.all([loadFriends(userId), loadFeed(userId)]);
+    } finally {
+      setAddingFriendId(null);
+    }
+  }
+
   const completedCount = missions.filter((m) => m.completed).length;
 
   return (
     <div className="route-page">
       <PageHeader
         eyebrow="Community"
-        title="Friends activity, AI missions and leaderboard"
-        description="This route groups the social layer that is separate from training planning but still tied to engagement and rewards."
-        badge="Owner suggestion: Member 4"
+        title="Social hub"
+        description="Discover your friends' activities, earn points through missions, and climb the leaderboard!"
+        badge=""
       />
 
       <div className="tab-row">
         {[
           { id: "feed", label: "Activity feed" },
+          { id: "friends", label: "Friends" },
           { id: "missions", label: "Weekly missions" },
           { id: "leaderboard", label: "Leaderboard" },
         ].map((tab) => (
@@ -237,7 +279,7 @@ export default function SocialHubPage() {
       {activeTab === "feed" && (
         <SectionCard
           title="Activity feed"
-          description="Missions completed by athletes on FitQuest."
+          description="Validated sessions from your friends."
         >
           <div className="stack-sm">
             {loadingFeed && (
@@ -245,28 +287,133 @@ export default function SocialHubPage() {
             )}
             {!loadingFeed && feedPosts.length === 0 && (
               <p className="section-card-copy">
-                No activity yet. Complete missions to appear in the feed!
+                No friend activity yet. Add friends, then their completed sessions and missions will appear here.
               </p>
             )}
             {!loadingFeed && feedPosts.map((post) => {
               let parsed: Record<string, unknown> = {};
               try { parsed = JSON.parse(post.content) as Record<string, unknown>; } catch { /* */ }
+              const activityType = (parsed["type"] as string) ?? "session_completed";
               const sport = (parsed["sport"] as SportType) ?? "OTHER";
+              const sessionTitle = (parsed["sessionTitle"] as string) ?? post.content;
               const missionTitle = (parsed["missionTitle"] as string) ?? post.content;
-              const pts = parsed["rewardPoints"] as number | undefined;
+              const rewardPoints = parsed["rewardPoints"] as number | undefined;
               const elapsed = Math.round((Date.now() - new Date(post.createdAt).getTime()) / 60000);
               const when = elapsed < 1 ? "just now" : elapsed < 60 ? `${elapsed} min ago` : `${Math.round(elapsed / 60)} h ago`;
+
               return (
-                <div key={post.id} className="mini-panel">
-                  <strong>{post.displayName}</strong>
-                  <p>{SPORT_ICONS[sport]} completed <em>{missionTitle}</em></p>
-                  {pts !== undefined && (
-                    <p className="section-card-copy">+{pts} pts earned</p>
+                <div
+                  key={post.id}
+                  className="mini-panel"
+                  style={{
+                    display: "grid",
+                    gap: "0.5rem",
+                    borderLeft: activityType === "mission_completed" ? "4px solid #f59e0b" : "4px solid #22c55e",
+                  }}
+                >
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "0.75rem" }}>
+                    <strong>{post.displayName}</strong>
+                    <span
+                      className="owner-pill owner-pill-subtle"
+                      style={{
+                        background: activityType === "mission_completed" ? "rgba(245, 158, 11, 0.14)" : "rgba(34, 197, 94, 0.14)",
+                        color: activityType === "mission_completed" ? "#b45309" : "#15803d",
+                      }}
+                    >
+                      {activityType === "mission_completed" ? "Mission completed" : "Session completed"}
+                    </span>
+                  </div>
+
+                  {activityType === "mission_completed" ? (
+                    <>
+                      <p style={{ margin: 0 }}>{SPORT_ICONS[sport]} completed mission <em>{missionTitle}</em></p>
+                      {rewardPoints !== undefined && (
+                        <p className="section-card-copy" style={{ margin: 0 }}>+{rewardPoints} pts earned</p>
+                      )}
+                    </>
+                  ) : (
+                    <p style={{ margin: 0 }}>{SPORT_ICONS[sport]} validated session <em>{sessionTitle}</em></p>
                   )}
-                  <span className="owner-pill owner-pill-subtle">{when}</span>
+
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "0.75rem" }}>
+                    <span className="section-card-copy" style={{ margin: 0 }}>
+                      {sport.charAt(0)}{sport.slice(1).toLowerCase()}
+                    </span>
+                    <span className="owner-pill owner-pill-subtle">{when}</span>
+                  </div>
                 </div>
               );
             })}
+          </div>
+        </SectionCard>
+      )}
+
+      {activeTab === "friends" && (
+        <SectionCard
+          title="Friends"
+          description="Add your friends and discover athletes from the platform."
+        >
+          <div className="stack-sm">
+            <div className="mini-panel">
+              <strong>Your friends</strong>
+              {loadingFriends && <p className="section-card-copy">Loading friends...</p>}
+              {!loadingFriends && friends.length === 0 && (
+                <p className="section-card-copy">You do not have any friends yet.</p>
+              )}
+              {!loadingFriends && friends.map((friend) => (
+                <div
+                  key={friend.id}
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                    gap: "0.75rem",
+                    marginTop: "0.6rem",
+                  }}
+                >
+                  <div>
+                    <strong>{friend.displayName}</strong>
+                    <p className="section-card-copy">Connected account</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <div className="mini-panel">
+              <strong>Suggested accounts</strong>
+              {loadingFriends && <p className="section-card-copy">Loading suggestions...</p>}
+              {!loadingFriends && friendSuggestions.length === 0 && (
+                <p className="section-card-copy">No suggestions available right now.</p>
+              )}
+              {!loadingFriends && friendSuggestions.map((suggestion) => (
+                <div
+                  key={suggestion.id}
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                    gap: "0.75rem",
+                    marginTop: "0.6rem",
+                  }}
+                >
+                  <div>
+                    <strong>{suggestion.displayName}</strong>
+                    <p className="section-card-copy">
+                      {SPORT_ICONS[suggestion.primarySport]} {suggestion.primarySport.toLowerCase()} · {suggestion.completedSessions} completed session{suggestion.completedSessions > 1 ? "s" : ""}
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    className="primary-button"
+                    onClick={() => handleAddFriend(suggestion.id)}
+                    disabled={addingFriendId === suggestion.id}
+                    style={{ padding: "0.4rem 0.75rem" }}
+                  >
+                    {addingFriendId === suggestion.id ? "Adding..." : "Add"}
+                  </button>
+                </div>
+              ))}
+            </div>
           </div>
         </SectionCard>
       )}
@@ -381,7 +528,7 @@ export default function SocialHubPage() {
       {activeTab === "leaderboard" && (
         <SectionCard
           title="Leaderboard"
-          description="Points earned through completed missions. Updates in real time."
+          description="Points earned through completed missions."
         >
           <div className="leaderboard-list">
             {loadingLeaderboard && (

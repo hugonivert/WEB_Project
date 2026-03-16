@@ -51,6 +51,21 @@ export type FeedPostDto = {
   createdAt: string;
 };
 
+export type FriendDto = {
+  id: string;
+  displayName: string;
+  avatarUrl: string | null;
+  friendshipCreatedAt: string;
+};
+
+export type FriendSuggestionDto = {
+  id: string;
+  displayName: string;
+  avatarUrl: string | null;
+  primarySport: SportType;
+  completedSessions: number;
+};
+
 export type LeaderboardEntryDto = {
   rank: number;
   userId: string;
@@ -58,8 +73,25 @@ export type LeaderboardEntryDto = {
   points: number;
 };
 
-export function fetchFeed() {
-  return request<{ posts: FeedPostDto[] }>("/api/social/posts");
+export function fetchFeed(userId: string) {
+  return request<{ posts: FeedPostDto[] }>(`/api/social/posts?userId=${encodeURIComponent(userId)}`);
+}
+
+export function fetchFriends(userId: string) {
+  return request<{ friends: FriendDto[] }>(`/api/social/friends?userId=${encodeURIComponent(userId)}`);
+}
+
+export function fetchFriendSuggestions(userId: string) {
+  return request<{ suggestions: FriendSuggestionDto[] }>(
+    `/api/social/friend-suggestions?userId=${encodeURIComponent(userId)}`,
+  );
+}
+
+export function addFriend(userId: string, friendId: string) {
+  return request<{ friend: FriendDto }>("/api/social/friends", {
+    method: "POST",
+    body: JSON.stringify({ userId, friendId }),
+  });
 }
 
 export function fetchLeaderboard() {

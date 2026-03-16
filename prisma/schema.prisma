@@ -65,6 +65,21 @@ model User {
   userChallenges UserChallenge[]
   inventory      UserAvatarItem[]
   rewardEvents   RewardEvent[]
+  friendshipsA   Friendship[]      @relation("FriendshipUser")
+  friendshipsB   Friendship[]      @relation("FriendshipFriend")
+}
+
+model Friendship {
+  id        String   @id @default(uuid())
+  userId    String
+  friendId  String
+  createdAt DateTime @default(now())
+  user      User     @relation("FriendshipUser", fields: [userId], references: [id], onDelete: Cascade)
+  friend    User     @relation("FriendshipFriend", fields: [friendId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, friendId])
+  @@index([userId])
+  @@index([friendId])
 }
 
 model AthleteProfile {
