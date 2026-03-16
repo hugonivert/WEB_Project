@@ -1,4 +1,10 @@
-import { Trophy, UserCircle2, CalendarRange, Activity, Newspaper } from "lucide-react";
+import {
+  Trophy,
+  UserCircle2,
+  CalendarRange,
+  Activity,
+  Newspaper,
+} from "lucide-react";
 import { NavLink, Outlet } from "react-router-dom";
 
 const navigationItems = [
@@ -16,8 +22,8 @@ export default function AppLayout() {
           <p className="sidebar-brand">FitQuest</p>
           <h2 className="sidebar-title">Group starter kit</h2>
           <p className="sidebar-copy">
-            Navigation, pages and mock content are ready so each teammate can work
-            inside a dedicated area.
+            Navigation, pages and mock content are ready so each teammate can
+            work inside a dedicated area.
           </p>
         </div>
 
@@ -45,7 +51,9 @@ export default function AppLayout() {
             <span>Weekly leaderboard</span>
           </div>
           <strong>#2 - 1640 pts</strong>
-          <p className="sidebar-copy">Mock gamification visible from all pages.</p>
+          <p className="sidebar-copy">
+            Mock gamification visible from all pages.
+          </p>
         </div>
       </aside>
 
