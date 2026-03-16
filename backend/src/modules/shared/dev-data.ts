@@ -1,6 +1,25 @@
 import { SessionStatus, SportType } from "../../../../generated/prisma/enums.js";
 
-export const DEV_PROFILE = {
+export const DEV_PROFILE: {
+  id: string;
+  email: string;
+  displayName: string;
+  avatarUrl: string | null;
+  createdAt: string;
+  updatedAt: string;
+  profile: {
+    id: string;
+    userId: string;
+    primarySport: SportType;
+    bio: string;
+    timezone: string;
+    age: number;
+    heightCm: number;
+    weightKg: number;
+    createdAt: string;
+    updatedAt: string;
+  };
+} = {
   id: "11111111-1111-4111-8111-111111111111",
   email: "planner.demo@athlete.local",
   displayName: "Planner Demo",
@@ -31,6 +50,7 @@ export type DevSession = {
   notes: string | null;
   location: string | null;
   status: keyof typeof SessionStatus;
+  completedData: Record<string, unknown> | null;
   createdAt: string;
   updatedAt: string;
 };
@@ -46,6 +66,7 @@ export const devSessionsStore: DevSession[] = [
     notes: "4 x 8 min at threshold pace",
     location: "Track",
     status: SessionStatus.PLANNED,
+    completedData: null,
     createdAt: "2026-03-13T08:00:00.000Z",
     updatedAt: "2026-03-13T08:00:00.000Z",
   },
@@ -59,6 +80,7 @@ export const devSessionsStore: DevSession[] = [
     notes: "Push focus and accessories",
     location: "Fitness club",
     status: SessionStatus.PLANNED,
+    completedData: null,
     createdAt: "2026-03-13T08:00:00.000Z",
     updatedAt: "2026-03-13T08:00:00.000Z",
   },
@@ -72,6 +94,7 @@ export const devSessionsStore: DevSession[] = [
     notes: "5 x 4 min threshold",
     location: "Outdoor loop",
     status: SessionStatus.PLANNED,
+    completedData: null,
     createdAt: "2026-03-13T08:00:00.000Z",
     updatedAt: "2026-03-13T08:00:00.000Z",
   },

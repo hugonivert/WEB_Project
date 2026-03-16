@@ -48,6 +48,7 @@ The schema is intentionally broader than the planner so each teammate has a clea
 ## Notes
 
 - `.env` is ignored by git and already configured locally for the provided Supabase database.
+- If Prisma schema commands hang on the pooled URL, set `DIRECT_DATABASE_URL` and Prisma will use it for `db push` and migrations.
 - The Prisma client is generated into `generated/prisma`.
 - The compiled backend entrypoint is `backend/dist/backend/src/index.js`.
 - For production, replace `passwordHash` handling with a real auth flow and hashed passwords.

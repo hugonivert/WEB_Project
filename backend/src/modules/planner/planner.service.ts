@@ -1,4 +1,5 @@
 import { PrismaClientKnownRequestError } from "@prisma/client/runtime/client";
+import type { Prisma } from "../../../../generated/prisma/client.js";
 import { SessionStatus } from "../../../../generated/prisma/enums.js";
 import { prisma } from "../../lib/prisma.js";
 import { DEV_PROFILE, devSessionsStore, type DevSession } from "../shared/dev-data.js";
@@ -12,6 +13,7 @@ type SessionPayload = {
   notes?: string;
   location?: string;
   status?: "PLANNED" | "COMPLETED" | "CANCELED";
+  completedData?: Prisma.InputJsonValue | typeof Prisma.JsonNull;
 };
 
 const canFallback = (error: unknown) =>
@@ -60,6 +62,7 @@ export async function createSession(payload: SessionPayload) {
         notes: payload.notes,
         location: payload.location,
         status: payload.status ?? SessionStatus.PLANNED,
+        completedData: payload.completedData ?? undefined,
       },
     });
   } catch (error) {
@@ -78,6 +81,8 @@ export async function createSession(payload: SessionPayload) {
       notes: payload.notes ?? null,
       location: payload.location ?? null,
       status: payload.status ?? SessionStatus.PLANNED,
+      completedData:
+        (payload.completedData as Record<string, unknown> | undefined) ?? null,
       createdAt: now,
       updatedAt: now,
     };
@@ -88,10 +93,21 @@ export async function createSession(payload: SessionPayload) {
 }
 
 export async function updateSession(sessionId: string, payload: Partial<SessionPayload>) {
+  const updateData: Prisma.TrainingSessionUpdateInput = {};
+
+  if (payload.title !== undefined) updateData.title = payload.title;
+  if (payload.sport !== undefined) updateData.sport = payload.sport;
+  if (payload.startAt !== undefined) updateData.startAt = payload.startAt;
+  if (payload.endAt !== undefined) updateData.endAt = payload.endAt;
+  if (payload.notes !== undefined) updateData.notes = payload.notes ?? null;
+  if (payload.location !== undefined) updateData.location = payload.location ?? null;
+  if (payload.status !== undefined) updateData.status = payload.status;
+  if (payload.completedData !== undefined) updateData.completedData = payload.completedData;
+
   try {
     return await prisma.trainingSession.update({
       where: { id: sessionId },
-      data: payload,
+      data: updateData,
     });
   } catch (error) {
     if (!canFallback(error)) {
@@ -110,6 +126,10 @@ export async function updateSession(sessionId: string, payload: Partial<SessionP
     if (payload.notes !== undefined) session.notes = payload.notes ?? null;
     if (payload.location !== undefined) session.location = payload.location ?? null;
     if (payload.status !== undefined) session.status = payload.status;
+    if (payload.completedData !== undefined) {
+      session.completedData =
+        (payload.completedData as Record<string, unknown> | undefined) ?? null;
+    }
     session.updatedAt = new Date().toISOString();
 
     return session;

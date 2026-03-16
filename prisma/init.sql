@@ -59,6 +59,7 @@ CREATE TABLE "TrainingSession" (
     "notes" TEXT,
     "location" TEXT,
     "status" "SessionStatus" NOT NULL DEFAULT 'PLANNED',
+    "completedData" JSONB,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" TIMESTAMP(3) NOT NULL,
 
