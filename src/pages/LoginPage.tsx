@@ -1,53 +1,301 @@
-import { Link } from "react-router-dom";
+import { FormEvent, useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
+import { AUTH_STORAGE_KEY } from "../lib/auth";
+
+type AuthMode = "login" | "signup";
+
+interface FormState {
+  displayName: string;
+  email: string;
+  password: string;
+  confirmPassword: string;
+}
+
+type AuthResponse = {
+  user: {
+    id: string;
+    email: string;
+    displayName: string;
+    avatarUrl?: string | null;
+  };
+  token: string;
+};
+
+const initialState: FormState = {
+  displayName: "",
+  email: "",
+  password: "",
+  confirmPassword: "",
+};
 
 export default function LoginPage() {
+  const navigate = useNavigate();
+  const [mode, setMode] = useState<AuthMode>("login");
+  const [form, setForm] = useState<FormState>(initialState);
+  const [error, setError] = useState<string>("");
+  const [loading, setLoading] = useState<boolean>(false);
+  const [info, setInfo] = useState<string>("");
+
+  const isSignup = mode === "signup";
+
+  const canSubmit = useMemo(() => {
+    if (!form.email.trim() || !form.password.trim()) return false;
+    if (isSignup) {
+      if (!form.displayName.trim()) return false;
+      if (!form.confirmPassword.trim()) return false;
+    }
+    return true;
+  }, [form, isSignup]);
+
+  const onChange = (key: keyof FormState, value: string) => {
+    setError("");
+    setInfo("");
+    setForm((prev) => ({ ...prev, [key]: value }));
+  };
+
+  const validate = (): boolean => {
+    if (!form.email.includes("@")) {
+      setError("Veuillez entrer un email valide.");
+      return false;
+    }
+
+    if (form.password.length < 6) {
+      setError("Le mot de passe doit contenir au moins 6 caractères.");
+      return false;
+    }
+
+    if (isSignup && form.password !== form.confirmPassword) {
+      setError("Les mots de passe ne correspondent pas.");
+      return false;
+    }
+
+    return true;
+  };
+
+  const onSubmit = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!validate()) return;
+
+    try {
+      setLoading(true);
+      setInfo(isSignup ? "Création du compte…" : "Connexion…");
+
+      const endpoint = isSignup ? "/api/auth/signup" : "/api/auth/login";
+      const body = isSignup
+        ? {
+            email: form.email,
+            password: form.password,
+            displayName: form.displayName,
+          }
+        : {
+            email: form.email,
+            password: form.password,
+          };
+
+      const response = await fetch(endpoint, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(body),
+      });
+
+      if (!response.ok) {
+        if (response.status === 401) {
+          setError("Email ou mot de passe incorrect.");
+          setInfo("");
+          return;
+        }
+        if (response.status === 409) {
+          setError("Cet email est déjà utilisé.");
+          setInfo("");
+          return;
+        }
+
+        const maybeJson = await response
+          .json()
+          .catch(() => ({ message: "Une erreur est survenue." }));
+        setError(maybeJson?.message ?? "Une erreur est survenue.");
+        setInfo("");
+        return;
+      }
+
+      const data = (await response.json()) as AuthResponse;
+
+      if (!data?.token || !data?.user?.email) {
+        setError("Réponse serveur invalide.");
+        return;
+      }
+
+      localStorage.setItem(
+        AUTH_STORAGE_KEY,
+        JSON.stringify({
+          token: data.token,
+          user: data.user,
+          loggedInAt: new Date().toISOString(),
+        }),
+      );
+
+      setInfo("");
+      navigate("/planner");
+    } catch {
+      setError("Une erreur est survenue. Réessaie.");
+      setInfo("");
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
     <div className="login-shell">
       <div className="login-panel">
         <div>
           <p className="eyebrow">FitQuest</p>
-          <h1 className="login-title">Login to your athlete space</h1>
+          <h1 className="login-title">
+            {isSignup ? "Créer un compte" : "Connexion"}
+          </h1>
           <p className="route-copy">
-            Minimal authentication page ready for the teammate who will implement
-            real login, session handling and API calls.
+            {isSignup
+              ? "Crée ton compte pour accéder au planner et aux stats."
+              : "Connecte-toi pour accéder à ton espace athlète."}
           </p>
         </div>
 
-        <form className="login-form">
-          <label className="field-label" htmlFor="login-email">
-            Email
-          </label>
-          <input
-            id="login-email"
-            className="field-input"
-            type="email"
-            placeholder="you@example.com"
-          />
+        <div className="login-actions" style={{ marginTop: 14 }}>
+          <button
+            type="button"
+            className={mode === "login" ? "primary-button" : "secondary-button"}
+            disabled={loading}
+            onClick={() => {
+              setMode("login");
+              setError("");
+            }}
+          >
+            Se connecter
+          </button>
+          <button
+            type="button"
+            className={
+              mode === "signup" ? "primary-button" : "secondary-button"
+            }
+            disabled={loading}
+            onClick={() => {
+              setMode("signup");
+              setError("");
+            }}
+          >
+            Créer un compte
+          </button>
+        </div>
 
-          <label className="field-label" htmlFor="login-password">
-            Password
-          </label>
-          <input
-            id="login-password"
-            className="field-input"
-            type="password"
-            placeholder="••••••••"
-          />
+        <form className="login-form" onSubmit={onSubmit}>
+          {isSignup && (
+            <div>
+              <label className="field-label" htmlFor="signup-name">
+                Nom
+              </label>
+              <input
+                id="signup-name"
+                className="field-input"
+                type="text"
+                placeholder="Ton nom"
+                value={form.displayName}
+                onChange={(e) => onChange("displayName", e.target.value)}
+              />
+            </div>
+          )}
+
+          <div>
+            <label className="field-label" htmlFor="auth-email">
+              Email
+            </label>
+            <input
+              id="auth-email"
+              className="field-input"
+              type="email"
+              placeholder="you@example.com"
+              value={form.email}
+              onChange={(e) => onChange("email", e.target.value)}
+            />
+          </div>
+
+          <div>
+            <label className="field-label" htmlFor="auth-password">
+              Mot de passe
+            </label>
+            <input
+              id="auth-password"
+              className="field-input"
+              type="password"
+              placeholder="••••••••"
+              value={form.password}
+              onChange={(e) => onChange("password", e.target.value)}
+            />
+          </div>
+
+          {isSignup && (
+            <div>
+              <label className="field-label" htmlFor="auth-confirm">
+                Confirmer le mot de passe
+              </label>
+              <input
+                id="auth-confirm"
+                className="field-input"
+                type="password"
+                placeholder="••••••••"
+                value={form.confirmPassword}
+                onChange={(e) => onChange("confirmPassword", e.target.value)}
+              />
+            </div>
+          )}
+
+          {error ? (
+            <div className="user-badge" style={{ background: "#fff5f5" }}>
+              <span style={{ color: "#dc2626" }}>{error}</span>
+            </div>
+          ) : null}
+
+          {info ? (
+            <div className="user-badge" style={{ background: "#f0f9ff" }}>
+              <span style={{ color: "#0369a1" }}>{info}</span>
+            </div>
+          ) : null}
 
           <div className="login-actions">
-            <Link to="/planner" className="primary-button login-link">
-              Enter demo app
-            </Link>
-            <button type="button" className="secondary-button">
-              Forgot password
+            <button
+              type="submit"
+              className="primary-button"
+              disabled={!canSubmit || loading}
+              style={
+                !canSubmit || loading
+                  ? { opacity: 0.7, cursor: "not-allowed" }
+                  : undefined
+              }
+            >
+              {loading
+                ? "Chargement..."
+                : isSignup
+                  ? "Créer mon compte"
+                  : "Se connecter"}
+            </button>
+            <button
+              type="button"
+              className="secondary-button"
+              onClick={() => {
+                setForm(initialState);
+                setError("");
+              }}
+            >
+              Effacer
             </button>
           </div>
         </form>
 
         <div className="section-card login-notes">
-          <h2 className="section-card-title">Suggested owner</h2>
+          <h2 className="section-card-title">Note</h2>
           <p className="section-card-copy">
-            Member 1: authentication flow, protected routes, backend integration.
+            Login relié au backend via <code>/api/auth</code>. Si tu n’as pas
+            encore de compte, utilise “Créer un compte”.
           </p>
         </div>
       </div>

@@ -1,5 +1,14 @@
-import { Trophy, UserCircle2, CalendarRange, Activity, Newspaper } from "lucide-react";
+import {
+  Trophy,
+  UserCircle2,
+  CalendarRange,
+  Activity,
+  Newspaper,
+} from "lucide-react";
 import { NavLink, Outlet } from "react-router-dom";
+import { useState, useEffect } from "react";
+import { readAuthSession } from "../lib/auth";
+import { fetchLeaderboard } from "../api/social";
 
 const navigationItems = [
   { to: "/planner", label: "Planner", icon: CalendarRange },
@@ -8,7 +17,36 @@ const navigationItems = [
   { to: "/avatar", label: "Avatar", icon: UserCircle2 },
 ];
 
+function useLeaderboardPosition() {
+  const [rank, setRank] = useState<number | null>(null);
+  const [points, setPoints] = useState<number | null>(null);
+
+  useEffect(() => {
+    async function load() {
+      try {
+        const session = readAuthSession();
+        if (!session?.user.id) return;
+
+        const { entries } = await fetchLeaderboard();
+        const entry = entries.find((e) => e.userId === session.user.id);
+        if (entry) {
+          setRank(entry.rank);
+          setPoints(entry.points);
+        } else {
+          setPoints(0);
+        }
+      } catch {
+        // silently ignore — sidebar is non-critical
+      }
+    }
+    load();
+  }, []);
+
+  return { rank, points };
+}
+
 export default function AppLayout() {
+  const { rank, points } = useLeaderboardPosition();
   return (
     <div className="app-shell">
       <aside className="app-sidebar">
@@ -16,8 +54,8 @@ export default function AppLayout() {
           <p className="sidebar-brand">FitQuest</p>
           <h2 className="sidebar-title">Group starter kit</h2>
           <p className="sidebar-copy">
-            Navigation, pages and mock content are ready so each teammate can work
-            inside a dedicated area.
+            Navigation, pages and mock content are ready so each teammate can
+            work inside a dedicated area.
           </p>
         </div>
 
@@ -44,8 +82,17 @@ export default function AppLayout() {
             <Trophy className="icon-sm" />
             <span>Weekly leaderboard</span>
           </div>
-          <strong>#2 - 1640 pts</strong>
-          <p className="sidebar-copy">Mock gamification visible from all pages.</p>
+          {points === null ? (
+            <strong>Chargement…</strong>
+          ) : points === 0 ? (
+            <strong>Pas encore de points</strong>
+          ) : (
+            <strong>
+              {rank !== null ? `#${rank} – ` : ""}
+              {points} pts
+            </strong>
+          )}
+          <p className="sidebar-copy">Points issus des missions complétées.</p>
         </div>
       </aside>
 

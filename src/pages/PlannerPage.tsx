@@ -7,7 +7,15 @@ import {
   type SlotInfo,
   type ToolbarProps,
 } from "react-big-calendar";
-import { addDays, addMonths, addWeeks, format, getDay, parse, startOfWeek } from "date-fns";
+import {
+  addDays,
+  addMonths,
+  addWeeks,
+  format,
+  getDay,
+  parse,
+  startOfWeek,
+} from "date-fns";
 import { enUS } from "date-fns/locale";
 import {
   Bike,
@@ -17,12 +25,12 @@ import {
   Dumbbell,
   PersonStanding,
   Plus,
+  LogOut,
 } from "lucide-react";
 import {
   createPlannerSession,
   deletePlannerSession,
   fetchSessions,
-  fetchTestProfile,
   updatePlannerSession,
   type CyclingCompletedData,
   type GymCompletedData,
@@ -33,6 +41,9 @@ import {
   type PlannerSport,
   type RunningCompletedData,
 } from "../api/planner";
+import { readAuthSession } from "../lib/auth";
+import { clearAuthSession } from "../lib/auth";
+import { useNavigate } from "react-router-dom";
 
 type SessionSport = "Running" | "Gym" | "Cycling" | "Mobility";
 type SessionStatus = "PLANNED" | "COMPLETED" | "CANCELED";
@@ -146,7 +157,9 @@ function completionDataToFormState(
   }
 
   if (sport === "Running" || sport === "Cycling") {
-    const enduranceData = completedData as RunningCompletedData | CyclingCompletedData;
+    const enduranceData = completedData as
+      | RunningCompletedData
+      | CyclingCompletedData;
     return {
       ...formState,
       distanceKm: String(enduranceData.distanceKm),
@@ -173,7 +186,9 @@ function completionDataToFormState(
   };
 }
 
-function buildCompletedData(formData: FormState): PlannerCompletedData | undefined {
+function buildCompletedData(
+  formData: FormState,
+): PlannerCompletedData | undefined {
   if (!formData.isCompleted) {
     return undefined;
   }
@@ -181,7 +196,11 @@ function buildCompletedData(formData: FormState): PlannerCompletedData | undefin
   const numberField = (value: string, label: string, allowZero = false) => {
     const parsed = Number(value);
 
-    if (!Number.isFinite(parsed) || (!allowZero && parsed <= 0) || (allowZero && parsed < 0)) {
+    if (
+      !Number.isFinite(parsed) ||
+      (!allowZero && parsed <= 0) ||
+      (allowZero && parsed < 0)
+    ) {
       throw new Error(`${label} is invalid.`);
     }
 
@@ -191,7 +210,10 @@ function buildCompletedData(formData: FormState): PlannerCompletedData | undefin
   if (formData.sport === "Running" || formData.sport === "Cycling") {
     return {
       distanceKm: numberField(formData.completionData.distanceKm, "Distance"),
-      durationMinutes: numberField(formData.completionData.durationMinutes, "Time"),
+      durationMinutes: numberField(
+        formData.completionData.durationMinutes,
+        "Time",
+      ),
       elevationGainM: numberField(
         formData.completionData.elevationGainM,
         "Elevation gain",
@@ -207,7 +229,11 @@ function buildCompletedData(formData: FormState): PlannerCompletedData | undefin
         "Exercises count",
       ),
       totalSets: numberField(formData.completionData.totalSets, "Total sets"),
-      totalLoadKg: numberField(formData.completionData.totalLoadKg, "Total load", true),
+      totalLoadKg: numberField(
+        formData.completionData.totalLoadKg,
+        "Total load",
+        true,
+      ),
     };
   }
 
@@ -218,7 +244,10 @@ function buildCompletedData(formData: FormState): PlannerCompletedData | undefin
   }
 
   return {
-    durationMinutes: numberField(formData.completionData.durationMinutes, "Duration"),
+    durationMinutes: numberField(
+      formData.completionData.durationMinutes,
+      "Duration",
+    ),
     focusArea,
   };
 }
@@ -229,7 +258,9 @@ function formatCompletedSummary(event: SessionEvent) {
   }
 
   if (event.sport === "Running" || event.sport === "Cycling") {
-    const enduranceData = event.completedData as RunningCompletedData | CyclingCompletedData;
+    const enduranceData = event.completedData as
+      | RunningCompletedData
+      | CyclingCompletedData;
     return `${enduranceData.distanceKm} km, ${enduranceData.durationMinutes} min, ${enduranceData.elevationGainM} m+`;
   }
 
@@ -332,6 +363,7 @@ function PlannerCalendarToolbar({
 }
 
 export default function PlannerPage() {
+  const navigate = useNavigate();
   const [profile, setProfile] = useState<PlannerProfile | null>(null);
   const [events, setEvents] = useState<SessionEvent[]>([]);
   const [selectedEvent, setSelectedEvent] = useState<SessionEvent | null>(null);
@@ -349,8 +381,26 @@ export default function PlannerPage() {
     async function loadPlannerData() {
       try {
         setIsLoading(true);
-        const nextProfile = await fetchTestProfile();
-        const nextSessions = await fetchSessions(nextProfile.id);
+
+        const session = readAuthSession();
+        if (!session?.user.id) {
+          navigate("/login");
+          return;
+        }
+
+        // Build a synthetic PlannerProfile from the auth session
+        const nextProfile: PlannerProfile = {
+          id: session.user.id,
+          email: session.user.email,
+          displayName: session.user.displayName,
+          avatarUrl: session.user.avatarUrl ?? null,
+          profile: {
+            primarySport: "RUNNING",
+            bio: null,
+            timezone: "Europe/Paris",
+          },
+        };
+        const nextSessions = await fetchSessions(session.user.id);
 
         if (!isMounted) {
           return;
@@ -365,7 +415,9 @@ export default function PlannerPage() {
         }
 
         setErrorMessage(
-          error instanceof Error ? error.message : "Unable to load planner data.",
+          error instanceof Error
+            ? error.message
+            : "Unable to load planner data.",
         );
       } finally {
         if (isMounted) {
@@ -385,7 +437,9 @@ export default function PlannerPage() {
     const total = events.length;
     const running = events.filter((event) => event.sport === "Running").length;
     const gym = events.filter((event) => event.sport === "Gym").length;
-    const completed = events.filter((event) => event.status === "COMPLETED").length;
+    const completed = events.filter(
+      (event) => event.status === "COMPLETED",
+    ).length;
     return { total, running, gym, completed };
   }, [events]);
 
@@ -395,7 +449,10 @@ export default function PlannerPage() {
 
     return events
       .filter((event) => format(event.start, "yyyy-MM-dd") === todayKey)
-      .sort((firstEvent, secondEvent) => firstEvent.start.getTime() - secondEvent.start.getTime());
+      .sort(
+        (firstEvent, secondEvent) =>
+          firstEvent.start.getTime() - secondEvent.start.getTime(),
+      );
   }, [events]);
 
   const openCreateForm = () => {
@@ -438,12 +495,17 @@ export default function PlannerPage() {
       notes: event.notes,
       location: event.location,
       isCompleted: event.status === "COMPLETED",
-      completionData: completionDataToFormState(event.sport, event.completedData),
+      completionData: completionDataToFormState(
+        event.sport,
+        event.completedData,
+      ),
     });
     setShowForm(true);
   };
 
-  const handleSubmit = async (submitEvent: React.FormEvent<HTMLFormElement>) => {
+  const handleSubmit = async (
+    submitEvent: React.FormEvent<HTMLFormElement>,
+  ) => {
     submitEvent.preventDefault();
 
     if (!profile) {
@@ -453,7 +515,11 @@ export default function PlannerPage() {
     const start = new Date(`${formData.date}T${formData.startTime}`);
     const end = new Date(`${formData.date}T${formData.endTime}`);
 
-    if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime()) || end <= start) {
+    if (
+      Number.isNaN(start.getTime()) ||
+      Number.isNaN(end.getTime()) ||
+      end <= start
+    ) {
       setErrorMessage("Start and end times are invalid.");
       return;
     }
@@ -463,7 +529,9 @@ export default function PlannerPage() {
     try {
       completedData = buildCompletedData(formData);
     } catch (error) {
-      setErrorMessage(error instanceof Error ? error.message : "Completion data is invalid.");
+      setErrorMessage(
+        error instanceof Error ? error.message : "Completion data is invalid.",
+      );
       return;
     }
 
@@ -478,16 +546,23 @@ export default function PlannerPage() {
         endAt: end.toISOString(),
         notes: formData.notes.trim(),
         location: formData.location.trim(),
-        status: formData.isCompleted ? ("COMPLETED" as const) : ("PLANNED" as const),
+        status: formData.isCompleted
+          ? ("COMPLETED" as const)
+          : ("PLANNED" as const),
         completedData,
       };
 
       if (selectedEvent) {
-        const updatedSession = await updatePlannerSession(selectedEvent.id, payload);
+        const updatedSession = await updatePlannerSession(
+          selectedEvent.id,
+          payload,
+        );
 
         setEvents((previousEvents) =>
           previousEvents.map((event) =>
-            event.id === selectedEvent.id ? toSessionEvent(updatedSession) : event,
+            event.id === selectedEvent.id
+              ? toSessionEvent(updatedSession)
+              : event,
           ),
         );
       } else {
@@ -496,7 +571,10 @@ export default function PlannerPage() {
           ...payload,
         });
 
-        setEvents((previousEvents) => [...previousEvents, toSessionEvent(createdSession)]);
+        setEvents((previousEvents) => [
+          ...previousEvents,
+          toSessionEvent(createdSession),
+        ]);
       }
 
       setShowForm(false);
@@ -527,7 +605,9 @@ export default function PlannerPage() {
       setSelectedEvent(null);
     } catch (error) {
       setErrorMessage(
-        error instanceof Error ? error.message : "Unable to delete the session.",
+        error instanceof Error
+          ? error.message
+          : "Unable to delete the session.",
       );
     } finally {
       setIsSubmitting(false);
@@ -549,7 +629,9 @@ export default function PlannerPage() {
     },
   });
 
-  const handleCalendarNavigate = (action: "PREV" | "NEXT" | "TODAY" | "DATE") => {
+  const handleCalendarNavigate = (
+    action: "PREV" | "NEXT" | "TODAY" | "DATE",
+  ) => {
     if (action === "TODAY") {
       setCurrentDate(new Date());
       setCurrentView("day");
@@ -578,6 +660,11 @@ export default function PlannerPage() {
     }
   };
 
+  const handleLogout = () => {
+    clearAuthSession();
+    navigate("/login", { replace: true });
+  };
+
   return (
     <div className="page-shell">
       <div className="page-container">
@@ -591,16 +678,37 @@ export default function PlannerPage() {
           </div>
 
           <div className="topbar-actions">
-            <button onClick={openCreateForm} className="primary-button" type="button">
+            <button
+              onClick={openCreateForm}
+              className="primary-button"
+              type="button"
+            >
               <Plus className="icon-sm" />
               Add session
             </button>
-            <Link to="/performance" className="secondary-button secondary-link-button">
+            <Link
+              to="/performance"
+              className="secondary-button secondary-link-button"
+            >
               View performance
             </Link>
             <div className="user-badge">
-              Test profile <span>{profile?.email ?? "Loading..."}</span>
+              Compte{" "}
+              <span>
+                {readAuthSession()?.user.email ??
+                  profile?.email ??
+                  "Loading..."}
+              </span>
             </div>
+
+            <button
+              type="button"
+              className="secondary-button"
+              onClick={handleLogout}
+            >
+              <LogOut className="icon-sm" />
+              Déconnexion
+            </button>
           </div>
         </header>
 
@@ -626,9 +734,12 @@ export default function PlannerPage() {
                   </div>
                   <p className="session-title">{event.title}</p>
                   <p className="session-copy">
-                    {format(event.start, "HH:mm")} - {format(event.end, "HH:mm")}
+                    {format(event.start, "HH:mm")} -{" "}
+                    {format(event.end, "HH:mm")}
                   </p>
-                  {event.location ? <p className="session-copy">{event.location}</p> : null}
+                  {event.location ? (
+                    <p className="session-copy">{event.location}</p>
+                  ) : null}
                 </button>
               ))}
             </div>
@@ -638,7 +749,10 @@ export default function PlannerPage() {
         </section>
 
         {errorMessage ? (
-          <section className="panel" style={{ marginBottom: "1.5rem", borderColor: "#fca5a5" }}>
+          <section
+            className="panel"
+            style={{ marginBottom: "1.5rem", borderColor: "#fca5a5" }}
+          >
             <p className="panel-copy">{errorMessage}</p>
           </section>
         ) : null}
@@ -674,7 +788,8 @@ export default function PlannerPage() {
               <div>
                 <h2 className="panel-title">Calendar overview</h2>
                 <p className="panel-copy">
-                  Click a slot to create a session, or click an event to edit it.
+                  Click a slot to create a session, or click an event to edit
+                  it.
                 </p>
               </div>
             </div>
@@ -704,7 +819,11 @@ export default function PlannerPage() {
 
                       if (action === "DATE") {
                         setCurrentDate(date);
-                        if (view === "month" || view === "week" || view === "day") {
+                        if (
+                          view === "month" ||
+                          view === "week" ||
+                          view === "day"
+                        ) {
                           setCurrentView(view);
                         }
                         return;
@@ -720,7 +839,11 @@ export default function PlannerPage() {
                       }
                     }}
                     onView={(view) => {
-                      if (view === "month" || view === "week" || view === "day") {
+                      if (
+                        view === "month" ||
+                        view === "week" ||
+                        view === "day"
+                      ) {
                         setCurrentView(view);
                       }
                     }}
@@ -764,18 +887,23 @@ export default function PlannerPage() {
                                 {event.sport}
                               </span>
                               {event.status === "COMPLETED" ? (
-                                <span className="chip chip-completed">Completed</span>
+                                <span className="chip chip-completed">
+                                  Completed
+                                </span>
                               ) : null}
                             </div>
                             <p className="session-title">{event.title}</p>
                             <p className="session-copy">
-                              {format(event.start, "EEE d MMM - HH:mm")} - {format(event.end, "HH:mm")}
+                              {format(event.start, "EEE d MMM - HH:mm")} -{" "}
+                              {format(event.end, "HH:mm")}
                             </p>
                             {event.location ? (
                               <p className="session-copy">{event.location}</p>
                             ) : null}
                             {completedSummary ? (
-                              <p className="session-copy session-copy-strong">{completedSummary}</p>
+                              <p className="session-copy session-copy-strong">
+                                {completedSummary}
+                              </p>
                             ) : null}
                           </div>
                           <Clock3 className="session-icon" />
@@ -785,7 +913,6 @@ export default function PlannerPage() {
                   })}
               </div>
             </div>
-
           </div>
         </section>
       </div>
@@ -879,7 +1006,10 @@ export default function PlannerPage() {
                     type="time"
                     value={formData.startTime}
                     onChange={(event) =>
-                      setFormData({ ...formData, startTime: event.target.value })
+                      setFormData({
+                        ...formData,
+                        startTime: event.target.value,
+                      })
                     }
                     className="field-input"
                     required
@@ -923,7 +1053,10 @@ export default function PlannerPage() {
                   type="checkbox"
                   checked={formData.isCompleted}
                   onChange={(event) =>
-                    setFormData({ ...formData, isCompleted: event.target.checked })
+                    setFormData({
+                      ...formData,
+                      isCompleted: event.target.checked,
+                    })
                   }
                 />
                 <span>Mark this session as done</span>
@@ -932,9 +1065,12 @@ export default function PlannerPage() {
               {formData.isCompleted ? (
                 <div className="completion-panel">
                   <div className="completion-panel-header">
-                    <h3 className="completion-panel-title">Completed session data</h3>
+                    <h3 className="completion-panel-title">
+                      Completed session data
+                    </h3>
                     <p className="panel-copy">
-                      {formData.sport === "Running" || formData.sport === "Cycling"
+                      {formData.sport === "Running" ||
+                      formData.sport === "Cycling"
                         ? "Add distance, time and elevation gain."
                         : formData.sport === "Gym"
                           ? "Add exercises count, total sets and total load."
@@ -942,7 +1078,8 @@ export default function PlannerPage() {
                     </p>
                   </div>
 
-                  {(formData.sport === "Running" || formData.sport === "Cycling") && (
+                  {(formData.sport === "Running" ||
+                    formData.sport === "Cycling") && (
                     <div className="two-column-grid">
                       <div>
                         <label className="field-label" htmlFor="distance-km">
@@ -968,7 +1105,10 @@ export default function PlannerPage() {
                         />
                       </div>
                       <div>
-                        <label className="field-label" htmlFor="duration-minutes">
+                        <label
+                          className="field-label"
+                          htmlFor="duration-minutes"
+                        >
                           Time (min)
                         </label>
                         <input
@@ -1019,7 +1159,10 @@ export default function PlannerPage() {
                   {formData.sport === "Gym" && (
                     <div className="two-column-grid">
                       <div>
-                        <label className="field-label" htmlFor="exercises-count">
+                        <label
+                          className="field-label"
+                          htmlFor="exercises-count"
+                        >
                           Exercises
                         </label>
                         <input
@@ -1093,7 +1236,10 @@ export default function PlannerPage() {
                   {formData.sport === "Mobility" && (
                     <div className="two-column-grid">
                       <div>
-                        <label className="field-label" htmlFor="mobility-duration">
+                        <label
+                          className="field-label"
+                          htmlFor="mobility-duration"
+                        >
                           Duration (min)
                         </label>
                         <input
@@ -1180,7 +1326,11 @@ export default function PlannerPage() {
                   >
                     Cancel
                   </button>
-                  <button type="submit" className="primary-button" disabled={isSubmitting}>
+                  <button
+                    type="submit"
+                    className="primary-button"
+                    disabled={isSubmitting}
+                  >
                     {isSubmitting
                       ? "Saving..."
                       : selectedEvent

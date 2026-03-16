@@ -13,7 +13,7 @@ import {
   type LeaderboardEntryDto,
   type SportType,
 } from "../api/social";
-import { fetchTestProfile } from "../api/planner";
+import { readAuthSession } from "../lib/auth";
 
 type SocialTab = "feed" | "missions" | "leaderboard";
 
@@ -106,11 +106,12 @@ export default function SocialHubPage() {
   const [leaderboardEntries, setLeaderboardEntries] = useState<LeaderboardEntryDto[]>([]);
   const [loadingLeaderboard, setLoadingLeaderboard] = useState(false);
 
-  // Load user profile once
+  // Load user id from auth session (real logged-in user)
   useEffect(() => {
-    fetchTestProfile()
-      .then((profile) => setUserId(profile.id))
-      .catch(() => setUserId("11111111-1111-4111-8111-111111111111"));
+    const session = readAuthSession();
+    if (session?.user.id) {
+      setUserId(session.user.id);
+    }
   }, []);
 
   const loadMissions = useCallback(async (uid: string) => {
