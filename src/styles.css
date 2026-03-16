@@ -275,6 +275,10 @@ button {
   grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
+.route-grid-4 {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
 .section-card,
 .user-badge,
 .panel,
@@ -337,6 +341,11 @@ button {
   background: #f8fafc;
   padding: 14px;
   border: 1px solid #e2e8f0;
+}
+
+.chart-wrap {
+  width: 100%;
+  min-height: 280px;
 }
 
 .tab-row {
