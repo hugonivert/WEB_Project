@@ -20,7 +20,7 @@ app.get("/", (_request, response) => {
       health: "/api/health",
       users: "/api/users",
       planner: "/api/planner/sessions",
-      performance: "/api/performance/metrics",
+      performance: "/api/performance/dashboard",
       social: "/api/social/posts",
       avatar: "/api/avatar/inventory",
       auth: "/api/auth/status",

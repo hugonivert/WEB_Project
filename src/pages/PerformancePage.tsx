@@ -1,61 +1,220 @@
-import { Link } from "react-router-dom";
+import { useEffect, useMemo, useState } from "react";
+import {
+  CartesianGrid,
+  Legend,
+  Line,
+  LineChart,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from "recharts";
+import { fetchPerformanceDashboard, type DeltaValue, type PerformanceDashboard } from "../api/performance";
+import { fetchTestProfile } from "../api/planner";
 import PageHeader from "../components/PageHeader";
 import SectionCard from "../components/SectionCard";
-import { performanceHighlights, weeklyMetrics } from "../data/mockData";
+
+function formatDuration(totalMinutes: number) {
+  const hours = Math.floor(totalMinutes / 60);
+  const minutes = Math.round(totalMinutes % 60);
+  return `${hours}h ${minutes}m`;
+}
+
+function formatDelta(delta: DeltaValue | null) {
+  if (!delta) {
+    return "No comparison";
+  }
+
+  if (delta.percent === null) {
+    return `${delta.absolute >= 0 ? "+" : ""}${delta.absolute}`;
+  }
+
+  return `${delta.percent >= 0 ? "+" : ""}${delta.percent}%`;
+}
+
+function formatPace(minutesPerKm: number | null) {
+  if (!minutesPerKm) {
+    return "-";
+  }
+
+  const minutes = Math.floor(minutesPerKm);
+  const seconds = Math.round((minutesPerKm - minutes) * 60);
+  return `${minutes}:${String(seconds).padStart(2, "0")} /km`;
+}
 
 export default function PerformancePage() {
+  const [dashboard, setDashboard] = useState<PerformanceDashboard | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    async function loadDashboard() {
+      try {
+        setIsLoading(true);
+        const profile = await fetchTestProfile();
+        const nextDashboard = await fetchPerformanceDashboard(profile.id);
+
+        if (!isMounted) {
+          return;
+        }
+
+        setDashboard(nextDashboard);
+        setErrorMessage(null);
+      } catch (error) {
+        if (!isMounted) {
+          return;
+        }
+
+        setErrorMessage(
+          error instanceof Error ? error.message : "Unable to load performance data.",
+        );
+      } finally {
+        if (isMounted) {
+          setIsLoading(false);
+        }
+      }
+    }
+
+    void loadDashboard();
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  const weeklyCards = useMemo(() => {
+    if (!dashboard) {
+      return [];
+    }
+
+    return [
+      {
+        label: "Running distance",
+        value: `${dashboard.weekly.running.distanceKm} km`,
+        delta: formatDelta(dashboard.weekly.running.distanceDelta),
+      },
+      {
+        label: "Cycling distance",
+        value: `${dashboard.weekly.cycling.distanceKm} km`,
+        delta: formatDelta(dashboard.weekly.cycling.distanceDelta),
+      },
+      {
+        label: "Gym total load",
+        value: `${dashboard.weekly.gym.totalLoadKg} kg`,
+        delta: formatDelta(dashboard.weekly.gym.totalLoadDelta),
+      },
+      {
+        label: "Mobility time",
+        value: formatDuration(dashboard.weekly.mobility.durationMinutes),
+        delta: formatDelta(dashboard.weekly.mobility.durationDelta),
+      },
+    ];
+  }, [dashboard]);
+
   return (
     <div className="route-page">
       <PageHeader
         eyebrow="Performance"
-        title="Analytics connected to the training planner"
-        description="This page is the natural extension of the calendar: the teammate in charge can consume planner data and turn it into charts, trends and recommendations."
-        badge="Owner suggestion: Member 3"
+        title="Science-driven training analysis"
+        description="Weekly, monthly and cumulative analytics computed from completed sessions in your planner."
+        badge="Connected to planner sessions"
       />
 
-      <div className="route-grid route-grid-3">
-        {weeklyMetrics.map((metric) => (
-          <SectionCard
-            key={metric.label}
-            title={metric.label}
-            description={metric.delta}
-            owner="Shared data contract with planner"
-          >
-            <p className="metric-value">{metric.value}</p>
-          </SectionCard>
-        ))}
-      </div>
+      {isLoading ? <p className="route-copy">Loading dashboard...</p> : null}
+      {errorMessage ? <p className="route-copy">{errorMessage}</p> : null}
 
-      <div className="route-grid route-grid-2">
-        <SectionCard
-          title="Planned integrations"
-          description="Hooks already implied between planner and analytics."
-        >
-          <ul className="list-clean">
-            <li>Read sessions from the planner store or API.</li>
-            <li>Compute weekly volume, streaks, intensity balance.</li>
-            <li>Expose charts and AI summary blocks.</li>
-          </ul>
-          <Link to="/planner" className="secondary-button secondary-link-button">
-            Back to planner
-          </Link>
-        </SectionCard>
-
-        <SectionCard
-          title="Mock highlights"
-          description="Temporary placeholders until real visualisations are built."
-        >
-          <div className="stack-sm">
-            {performanceHighlights.map((item) => (
-              <div key={item.title} className="mini-panel">
-                <strong>{item.title}</strong>
-                <p className="metric-value metric-value-small">{item.value}</p>
-                <p className="section-card-copy">{item.insight}</p>
-              </div>
+      {!isLoading && !errorMessage && dashboard ? (
+        <>
+          <div className="route-grid route-grid-4">
+            {weeklyCards.map((card) => (
+              <SectionCard key={card.label} title={card.label} description={`Delta: ${card.delta}`}>
+                <p className="metric-value">{card.value}</p>
+              </SectionCard>
             ))}
           </div>
-        </SectionCard>
-      </div>
+
+          <div className="route-grid route-grid-2">
+            <SectionCard title="Weekly distance trend" description="Last 10 weeks (running + cycling)">
+              <div className="chart-wrap">
+                <ResponsiveContainer width="100%" height={280}>
+                  <LineChart data={dashboard.trends.weeklyDistance}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+                    <XAxis dataKey="label" />
+                    <YAxis />
+                    <Tooltip />
+                    <Legend />
+                    <Line type="monotone" dataKey="runningKm" stroke="#ea580c" strokeWidth={2} />
+                    <Line type="monotone" dataKey="cyclingKm" stroke="#0284c7" strokeWidth={2} />
+                  </LineChart>
+                </ResponsiveContainer>
+              </div>
+            </SectionCard>
+
+            <SectionCard title="Monthly distance trend" description="Last 6 months (running + cycling)">
+              <div className="chart-wrap">
+                <ResponsiveContainer width="100%" height={280}>
+                  <LineChart data={dashboard.trends.monthlyDistance}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+                    <XAxis dataKey="label" />
+                    <YAxis />
+                    <Tooltip />
+                    <Legend />
+                    <Line type="monotone" dataKey="runningKm" stroke="#ea580c" strokeWidth={2} />
+                    <Line type="monotone" dataKey="cyclingKm" stroke="#0284c7" strokeWidth={2} />
+                  </LineChart>
+                </ResponsiveContainer>
+              </div>
+            </SectionCard>
+          </div>
+
+          <div className="route-grid route-grid-2">
+            <SectionCard title="Monthly summary" description="Current month by sport">
+              <ul className="list-clean">
+                <li>
+                  Running: {dashboard.monthly.running.distanceKm} km,{" "}
+                  {formatDuration(dashboard.monthly.running.durationMinutes)}, pace{" "}
+                  {formatPace(dashboard.monthly.running.avgPaceMinPerKm)}
+                </li>
+                <li>
+                  Cycling: {dashboard.monthly.cycling.distanceKm} km,{" "}
+                  {formatDuration(dashboard.monthly.cycling.durationMinutes)}, avg speed{" "}
+                  {dashboard.monthly.cycling.avgSpeedKmH ?? "-"} km/h
+                </li>
+                <li>
+                  Gym: {dashboard.monthly.gym.sessions} sessions, {dashboard.monthly.gym.totalSets} sets,{" "}
+                  {dashboard.monthly.gym.totalLoadKg} kg
+                </li>
+                <li>
+                  Mobility: {dashboard.monthly.mobility.sessions} sessions,{" "}
+                  {formatDuration(dashboard.monthly.mobility.durationMinutes)}, top area{" "}
+                  {dashboard.monthly.mobility.topFocusArea ?? "-"}
+                </li>
+              </ul>
+            </SectionCard>
+
+            <SectionCard title="Cumulative summary" description="From your first completed session">
+              <ul className="list-clean">
+                <li>
+                  Running total: {dashboard.cumulative.running.distanceKm} km over{" "}
+                  {dashboard.cumulative.running.sessions} sessions
+                </li>
+                <li>
+                  Cycling total: {dashboard.cumulative.cycling.distanceKm} km over{" "}
+                  {dashboard.cumulative.cycling.sessions} sessions
+                </li>
+                <li>
+                  Gym total load: {dashboard.cumulative.gym.totalLoadKg} kg ({dashboard.cumulative.gym.totalSets} sets)
+                </li>
+                <li>
+                  Mobility total time: {formatDuration(dashboard.cumulative.mobility.durationMinutes)}
+                </li>
+              </ul>
+            </SectionCard>
+          </div>
+        </>
+      ) : null}
     </div>
   );
 }
