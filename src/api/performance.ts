@@ -82,7 +82,7 @@ async function request<T>(path: string): Promise<T> {
   return response.json() as Promise<T>;
 }
 
-export function fetchPerformanceDashboard(userId?: string) {
-  const query = userId ? `?userId=${encodeURIComponent(userId)}` : "";
+export function fetchPerformanceDashboard(userId: string) {
+  const query = `?userId=${encodeURIComponent(userId)}`;
   return request<PerformanceDashboard>(`/api/performance/dashboard${query}`);
 }

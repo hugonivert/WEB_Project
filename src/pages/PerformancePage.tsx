@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import {
   CartesianGrid,
   Legend,
@@ -10,9 +11,9 @@ import {
   YAxis,
 } from "recharts";
 import { fetchPerformanceDashboard, type DeltaValue, type PerformanceDashboard } from "../api/performance";
-import { fetchTestProfile } from "../api/planner";
 import PageHeader from "../components/PageHeader";
 import SectionCard from "../components/SectionCard";
+import { readAuthSession } from "../lib/auth";
 
 function formatDuration(totalMinutes: number) {
   const hours = Math.floor(totalMinutes / 60);
@@ -43,6 +44,7 @@ function formatPace(minutesPerKm: number | null) {
 }
 
 export default function PerformancePage() {
+  const navigate = useNavigate();
   const [dashboard, setDashboard] = useState<PerformanceDashboard | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -53,8 +55,15 @@ export default function PerformancePage() {
     async function loadDashboard() {
       try {
         setIsLoading(true);
-        const profile = await fetchTestProfile();
-        const nextDashboard = await fetchPerformanceDashboard(profile.id);
+        const session = readAuthSession();
+        if (!session?.user.id) {
+          if (isMounted) {
+            navigate("/login", { replace: true });
+          }
+          return;
+        }
+
+        const nextDashboard = await fetchPerformanceDashboard(session.user.id);
 
         if (!isMounted) {
           return;
@@ -82,7 +91,7 @@ export default function PerformancePage() {
     return () => {
       isMounted = false;
     };
-  }, []);
+  }, [navigate]);
 
   const weeklyCards = useMemo(() => {
     if (!dashboard) {
