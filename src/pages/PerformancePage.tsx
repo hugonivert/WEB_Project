@@ -11,9 +11,9 @@ import {
   YAxis,
 } from "recharts";
 import { fetchPerformanceDashboard, type DeltaValue, type PerformanceDashboard } from "../api/performance";
+import { readAuthSession } from "../lib/auth";
 import PageHeader from "../components/PageHeader";
 import SectionCard from "../components/SectionCard";
-import { readAuthSession } from "../lib/auth";
 
 function formatDuration(totalMinutes: number) {
   const hours = Math.floor(totalMinutes / 60);
