@@ -106,17 +106,17 @@ const defaultCompletionData = (): CompletionFormState => ({
   focusArea: "",
 });
 
-const defaultFormData: FormState = {
+const createDefaultFormData = (): FormState => ({
   title: "",
   sport: "Running",
-  date: "2026-03-16",
+  date: format(new Date(), "yyyy-MM-dd"),
   startTime: "18:00",
   endTime: "19:00",
   notes: "",
   location: "",
   isCompleted: false,
   completionData: defaultCompletionData(),
-};
+});
 
 const sportStyles: Record<SessionSport, string> = {
   Running: "chip chip-running",
@@ -368,7 +368,7 @@ export default function PlannerPage() {
   const [events, setEvents] = useState<SessionEvent[]>([]);
   const [selectedEvent, setSelectedEvent] = useState<SessionEvent | null>(null);
   const [showForm, setShowForm] = useState(false);
-  const [formData, setFormData] = useState<FormState>(defaultFormData);
+  const [formData, setFormData] = useState<FormState>(() => createDefaultFormData());
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -457,7 +457,7 @@ export default function PlannerPage() {
 
   const openCreateForm = () => {
     setSelectedEvent(null);
-    setFormData(defaultFormData);
+    setFormData(createDefaultFormData());
     setShowForm(true);
   };
 
@@ -579,7 +579,7 @@ export default function PlannerPage() {
 
       setShowForm(false);
       setSelectedEvent(null);
-      setFormData(defaultFormData);
+      setFormData(createDefaultFormData());
     } catch (error) {
       setErrorMessage(
         error instanceof Error ? error.message : "Unable to save the session.",
