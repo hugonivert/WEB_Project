@@ -55,17 +55,17 @@ export default function LoginPage() {
 
   const validate = (): boolean => {
     if (!form.email.includes("@")) {
-      setError("Veuillez entrer un email valide.");
+      setError("Please enter a valid email address.");
       return false;
     }
 
     if (form.password.length < 6) {
-      setError("Le mot de passe doit contenir au moins 6 caractères.");
+      setError("Password must contain at least 6 characters.");
       return false;
     }
 
     if (isSignup && form.password !== form.confirmPassword) {
-      setError("Les mots de passe ne correspondent pas.");
+      setError("Passwords do not match.");
       return false;
     }
 
@@ -78,7 +78,7 @@ export default function LoginPage() {
 
     try {
       setLoading(true);
-      setInfo(isSignup ? "Création du compte…" : "Connexion…");
+      setInfo(isSignup ? "Creating account..." : "Signing in...");
 
       const endpoint = isSignup ? "/api/auth/signup" : "/api/auth/login";
       const body = isSignup
@@ -102,20 +102,20 @@ export default function LoginPage() {
 
       if (!response.ok) {
         if (response.status === 401) {
-          setError("Email ou mot de passe incorrect.");
+          setError("Incorrect email or password.");
           setInfo("");
           return;
         }
         if (response.status === 409) {
-          setError("Cet email est déjà utilisé.");
+          setError("This email is already in use.");
           setInfo("");
           return;
         }
 
         const maybeJson = await response
           .json()
-          .catch(() => ({ message: "Une erreur est survenue." }));
-        setError(maybeJson?.message ?? "Une erreur est survenue.");
+          .catch(() => ({ message: "An error occurred." }));
+        setError(maybeJson?.message ?? "An error occurred.");
         setInfo("");
         return;
       }
@@ -123,7 +123,7 @@ export default function LoginPage() {
       const data = (await response.json()) as AuthResponse;
 
       if (!data?.token || !data?.user?.email) {
-        setError("Réponse serveur invalide.");
+        setError("Invalid server response.");
         return;
       }
 
@@ -139,7 +139,7 @@ export default function LoginPage() {
       setInfo("");
       navigate("/planner");
     } catch {
-      setError("Une erreur est survenue. Réessaie.");
+      setError("An error occurred. Please try again.");
       setInfo("");
     } finally {
       setLoading(false);
@@ -152,12 +152,12 @@ export default function LoginPage() {
         <div>
           <p className="eyebrow">FitQuest</p>
           <h1 className="login-title">
-            {isSignup ? "Créer un compte" : "Connexion"}
+            {isSignup ? "Create an account" : "Sign in"}
           </h1>
           <p className="route-copy">
             {isSignup
-              ? "Crée ton compte pour accéder au planner et aux stats."
-              : "Connecte-toi pour accéder à ton espace athlète."}
+              ? "Create your account to access planning and performance stats."
+              : "Sign in to access your athlete dashboard."}
           </p>
         </div>
 
@@ -171,7 +171,7 @@ export default function LoginPage() {
               setError("");
             }}
           >
-            Se connecter
+            Sign in
           </button>
           <button
             type="button"
@@ -184,7 +184,7 @@ export default function LoginPage() {
               setError("");
             }}
           >
-            Créer un compte
+            Create an account
           </button>
         </div>
 
@@ -192,13 +192,13 @@ export default function LoginPage() {
           {isSignup && (
             <div>
               <label className="field-label" htmlFor="signup-name">
-                Nom
+                Name
               </label>
               <input
                 id="signup-name"
                 className="field-input"
                 type="text"
-                placeholder="Ton nom"
+                placeholder="Your name"
                 value={form.displayName}
                 onChange={(e) => onChange("displayName", e.target.value)}
               />
@@ -221,7 +221,7 @@ export default function LoginPage() {
 
           <div>
             <label className="field-label" htmlFor="auth-password">
-              Mot de passe
+              Password
             </label>
             <input
               id="auth-password"
@@ -236,7 +236,7 @@ export default function LoginPage() {
           {isSignup && (
             <div>
               <label className="field-label" htmlFor="auth-confirm">
-                Confirmer le mot de passe
+                Confirm password
               </label>
               <input
                 id="auth-confirm"
@@ -273,10 +273,10 @@ export default function LoginPage() {
               }
             >
               {loading
-                ? "Chargement..."
+                ? "Loading..."
                 : isSignup
-                  ? "Créer mon compte"
-                  : "Se connecter"}
+                  ? "Create my account"
+                  : "Sign in"}
             </button>
             <button
               type="button"
@@ -286,7 +286,7 @@ export default function LoginPage() {
                 setError("");
               }}
             >
-              Effacer
+              Clear
             </button>
           </div>
         </form>
@@ -294,8 +294,7 @@ export default function LoginPage() {
         <div className="section-card login-notes">
           <h2 className="section-card-title">Note</h2>
           <p className="section-card-copy">
-            Login relié au backend via <code>/api/auth</code>. Si tu n’as pas
-            encore de compte, utilise “Créer un compte”.
+          If you do not have an account yet, use "Create an account".
           </p>
         </div>
       </div>

@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useState } from "react";
-import { Link } from "react-router-dom";
 import {
   Calendar,
   dateFnsLocalizer,
@@ -686,14 +685,8 @@ export default function PlannerPage() {
               <Plus className="icon-sm" />
               Add session
             </button>
-            <Link
-              to="/performance"
-              className="secondary-button secondary-link-button"
-            >
-              View performance
-            </Link>
             <div className="user-badge">
-              Compte{" "}
+              Account{" "}
               <span>
                 {readAuthSession()?.user.email ??
                   profile?.email ??
@@ -707,7 +700,7 @@ export default function PlannerPage() {
               onClick={handleLogout}
             >
               <LogOut className="icon-sm" />
-              Déconnexion
+              Sign out
             </button>
           </div>
         </header>

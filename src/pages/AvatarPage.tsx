@@ -35,7 +35,7 @@ export default function AvatarPage() {
 
         const session = readAuthSession();
         if (!session?.user.id) {
-          setErrorMessage("Non connecté. Veuillez vous reconnecter.");
+          setErrorMessage("Not signed in. Please sign in again.");
           setIsLoading(false);
           return;
         }
@@ -119,9 +119,8 @@ export default function AvatarPage() {
     <div className="route-page">
       <PageHeader
         eyebrow="Avatar"
-        title="Avatar progression"
-        description="The avatar viewer is now the main stage of the page, while session-based rewards prepare the clothing unlock loop for later."
-        badge="Ready Player Me MVP"
+        title="Avatar"
+        description="Create and customize your avatar."
       />
 
       <section className="avatar-hero-card">
