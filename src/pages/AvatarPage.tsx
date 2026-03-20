@@ -1,18 +1,16 @@
-import { useEffect, useState } from "react";
+import { lazy, Suspense, useEffect, useState } from "react";
 import PageHeader from "../components/PageHeader";
 import SectionCard from "../components/SectionCard";
 import AvatarViewer from "../components/avatar/AvatarViewer";
-import ReadyPlayerMeCreator from "../components/avatar/ReadyPlayerMeCreator";
 import { fetchAvatarProfile, updateAvatarProfile, type AvatarProfileDto } from "../api/avatar";
 import { readAuthSession } from "../lib/auth";
 import type { PlannerProfile } from "../api/planner";
 
-const rpmSubdomain = import.meta.env.VITE_RPM_SUBDOMAIN || "demo";
+const AvataaarsCreator = lazy(() => import("../components/avatar/AvataaarsCreator"));
 
 export default function AvatarPage() {
   const [user, setUser] = useState<PlannerProfile | null>(null);
   const [avatarProfile, setAvatarProfile] = useState<AvatarProfileDto | null>(null);
-  const [isEditorOpen, setIsEditorOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -85,7 +83,6 @@ export default function AvatarPage() {
       setErrorMessage(null);
       const updatedProfile = await updateAvatarProfile(user.id, avatarUrl);
       setAvatarProfile(updatedProfile);
-      setIsEditorOpen(false);
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : "Unable to save avatar.");
     } finally {
@@ -98,8 +95,8 @@ export default function AvatarPage() {
       <PageHeader
         eyebrow="Avatar"
         title="Create your avatar"
-        description="Use the creator on the left, then view the final avatar on the right."
-        badge="Ready Player Me"
+        description="Build a 2D Avataaars avatar directly in the page, save it, and preview it here."
+        badge="Avataaars"
       />
 
       {errorMessage ? <p className="avatar-error-text">{errorMessage}</p> : null}
@@ -107,38 +104,20 @@ export default function AvatarPage() {
       <div className="route-grid route-grid-2">
         <SectionCard
           title="Avatar creator"
-          description="Open the creator, finish your avatar, and export it to save it on your profile."
+          description="Customize your Avataaars avatar directly in the page and save it to your profile."
         >
-          <div className="stack-sm">
-            <div className="action-row">
-              <button
-                type="button"
-                className="primary-button"
-                onClick={() => setIsEditorOpen((current) => !current)}
-              >
-                {isEditorOpen ? "Hide creator" : "Create avatar"}
-              </button>
-              <span className="section-card-copy">
-                {isSaving ? "Saving avatar..." : "Export from the creator to update the preview."}
-              </span>
-            </div>
-
-            {isEditorOpen ? (
-              <ReadyPlayerMeCreator subdomain={rpmSubdomain} onAvatarExported={handleAvatarExported} />
-            ) : (
-              <div className="mini-panel">
-                <strong>Start here</strong>
-                <p className="section-card-copy">
-                  Click "Create avatar" to open the editor.
-                </p>
-              </div>
-            )}
-          </div>
+          <Suspense fallback={<p className="section-card-copy">Loading avatar editor...</p>}>
+            <AvataaarsCreator
+              initialAvatarUrl={avatarProfile?.avatarUrl ?? null}
+              isSaving={isSaving}
+              onAvatarSaved={handleAvatarExported}
+            />
+          </Suspense>
         </SectionCard>
 
         <SectionCard
           title="Your avatar"
-          description="This block shows the avatar currently saved on your account."
+          description="This block shows the 2D avatar currently saved on your account."
         >
           {isLoading ? (
             <div className="avatar-viewer avatar-viewer-empty">

@@ -9,13 +9,13 @@ export default function AvatarInventoryPanel({ inventory }: AvatarInventoryPanel
   return (
     <SectionCard
       title="Unlock roadmap"
-      description="Base Ready Player Me cosmetics are available now. Progression-linked rewards can plug into this panel later."
+      description="The base Avataaars avatar is user-managed. Progression-linked rewards can plug into this panel later."
     >
       <div className="stack-sm">
         <div className="mini-panel">
           <strong>Current policy</strong>
           <p className="section-card-copy">
-            Only the standard Ready Player Me catalog is enabled for the MVP.
+            The MVP stores one Avataaars SVG avatar per user profile.
           </p>
         </div>
 

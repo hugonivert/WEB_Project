@@ -2,7 +2,7 @@ export type AvatarProfileDto = {
   userId: string;
   displayName: string;
   avatarUrl: string | null;
-  rpmAvatarId: string | null;
+  avatarProviderId: string | null;
   avatarPreviewUrl: string | null;
   unlocksEnabled: boolean;
   progression: {

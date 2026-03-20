@@ -56,7 +56,7 @@ function extractAvatarId(avatarUrl: string | null) {
     return null;
   }
 
-  const match = avatarUrl.match(/\/avatars\/([^/?]+)\.glb/i);
+  const match = avatarUrl.match(/\/([A-Z0-9]{1,20})(?=\/(?:avatar|crop)b?\.png$)/i);
   return match?.[1] ?? null;
 }
 
@@ -65,7 +65,7 @@ function toAvatarPreviewUrl(avatarUrl: string | null) {
     return null;
   }
 
-  return avatarUrl.replace(/\.glb(\?.*)?$/i, ".png");
+  return avatarUrl;
 }
 
 function getSessionDurationMinutes(startAt: Date | string, endAt: Date | string) {
@@ -126,7 +126,7 @@ function buildAvatarProfile(
     userId: user.id,
     displayName: user.displayName,
     avatarUrl: user.avatarUrl,
-    rpmAvatarId: extractAvatarId(user.avatarUrl),
+    avatarProviderId: extractAvatarId(user.avatarUrl),
     avatarPreviewUrl: toAvatarPreviewUrl(user.avatarUrl),
     unlocksEnabled: false,
     progression: {
@@ -135,15 +135,15 @@ function buildAvatarProfile(
       streakDays: 0,
     },
     cosmeticPolicy: {
-      baseCatalog: "ready-player-me-default",
+      baseCatalog: "avataaars-local-2d",
       lockedCatalogs: ["achievement-rewards", "seasonal-drops", "xp-shop"],
     },
     creatorPolicy: {
-      targetMode: "traits-only-onboarding",
-      allowedAtSignup: ["body-shape", "face-shape", "skin-color"],
-      lockedAtSignup: ["clothing", "accessories"],
+      targetMode: "in-app-2d-avatar",
+      allowedAtSignup: ["base-style", "colors", "hair", "face", "clothing", "accessories"],
+      lockedAtSignup: [],
       providerConstraint:
-        "The standard Ready Player Me web creator cannot fully enforce this UX; use a custom creator flow for strict control.",
+        "Avataaars is rendered locally in the web app and stored as an SVG data URL on the user profile.",
     },
     unlockProgress: trainingUnlockRules.map((rule) => ({
       ...rule,
