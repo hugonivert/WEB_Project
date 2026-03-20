@@ -1,16 +1,23 @@
-import { useEffect, useState } from "react";
+import { lazy, Suspense, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import PageHeader from "../components/PageHeader";
 import SectionCard from "../components/SectionCard";
 import AvatarViewer from "../components/avatar/AvatarViewer";
-import { fetchAvatarProfile, type AvatarProfileDto } from "../api/avatar";
+import {
+  fetchAvatarProfile,
+  updateAvatarProfile,
+  type AvatarProfileDto,
+} from "../api/avatar";
 import { readAuthSession } from "../lib/auth";
 import type { PlannerProfile } from "../api/planner";
 
-export default function AvatarPage() {
+const AvataaarsCreator = lazy(() => import("../components/avatar/AvataaarsCreator"));
+
+export default function AvatarEditPage() {
   const [user, setUser] = useState<PlannerProfile | null>(null);
   const [avatarProfile, setAvatarProfile] = useState<AvatarProfileDto | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [isSaving, setIsSaving] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   useEffect(() => {
@@ -71,21 +78,57 @@ export default function AvatarPage() {
     };
   }, []);
 
+  async function handleAvatarExported(avatarUrl: string) {
+    if (!user) {
+      return;
+    }
+
+    try {
+      setIsSaving(true);
+      setErrorMessage(null);
+      const updatedProfile = await updateAvatarProfile(user.id, avatarUrl);
+      setAvatarProfile(updatedProfile);
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : "Unable to save avatar.");
+    } finally {
+      setIsSaving(false);
+    }
+  }
+
   return (
     <div className="route-page">
       <PageHeader
         eyebrow="Avatar"
-        title="Your avatar"
-        description="See the avatar currently saved on your profile, then open the editor when you want to change it."
+        title="Modify your avatar"
+        description="Customize your avatar on this dedicated editor page, then save it to your profile."
         badge="Avataaars"
       />
 
+      <div className="avatar-page-actions">
+        <Link to="/avatar" className="secondary-button">
+          Back to my avatar
+        </Link>
+      </div>
+
       {errorMessage ? <p className="avatar-error-text">{errorMessage}</p> : null}
 
-      <div className="route-grid route-grid-1">
+      <div className="route-grid route-grid-2">
         <SectionCard
-          title="Your avatar"
-          description="This page only shows your current avatar. Use the button below to open the customization page."
+          title="Avatar creator"
+          description="Customize your Avataaars avatar directly in the page and save it to your profile."
+        >
+          <Suspense fallback={<p className="section-card-copy">Loading avatar editor...</p>}>
+            <AvataaarsCreator
+              initialAvatarUrl={avatarProfile?.avatarUrl ?? null}
+              isSaving={isSaving}
+              onAvatarSaved={handleAvatarExported}
+            />
+          </Suspense>
+        </SectionCard>
+
+        <SectionCard
+          title="Current preview"
+          description="Preview the avatar currently saved on your account."
         >
           {isLoading ? (
             <div className="avatar-viewer avatar-viewer-empty">
@@ -97,12 +140,6 @@ export default function AvatarPage() {
               displayName={avatarProfile?.displayName ?? user?.displayName ?? "Connected user"}
             />
           )}
-
-          <div className="avatar-page-actions">
-            <Link to="/avatar/edit" className="primary-button">
-              Modify my avatar
-            </Link>
-          </div>
         </SectionCard>
       </div>
     </div>

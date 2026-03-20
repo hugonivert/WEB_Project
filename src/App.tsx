@@ -9,6 +9,7 @@ import SocialHubPage from "./pages/SocialHubPage";
 import { AUTH_STORAGE_KEY, isLoggedIn } from "./lib/auth";
 
 const AvatarPage = lazy(() => import("./pages/AvatarPage"));
+const AvatarEditPage = lazy(() => import("./pages/AvatarEditPage"));
 
 export default function App() {
   const [loggedIn, setLoggedIn] = useState<boolean>(() => isLoggedIn());
@@ -71,6 +72,18 @@ export default function App() {
               path="/social"
               element={
                 loggedIn ? <SocialHubPage /> : <Navigate to="/login" replace />
+              }
+            />
+            <Route
+              path="/avatar/edit"
+              element={
+                loggedIn ? (
+                  <Suspense fallback={<div className="route-page">Loading avatar editor...</div>}>
+                    <AvatarEditPage />
+                  </Suspense>
+                ) : (
+                  <Navigate to="/login" replace />
+                )
               }
             />
             <Route
