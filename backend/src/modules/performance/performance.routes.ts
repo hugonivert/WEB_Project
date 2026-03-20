@@ -1,9 +1,6 @@
 import { Router } from "express";
 import { z } from "zod";
-import {
-  getPerformanceDashboard,
-  resolvePerformanceUserId,
-} from "./performance.service.js";
+import { getPerformanceDashboard } from "./performance.service.js";
 
 export const performanceRouter = Router();
 
@@ -16,13 +13,12 @@ performanceRouter.get("/metrics", (_request, response) => {
 });
 
 const dashboardQuerySchema = z.object({
-  userId: z.string().uuid().optional(),
+  userId: z.string().uuid(),
 });
 
 performanceRouter.get("/dashboard", async (request, response) => {
   const query = dashboardQuerySchema.parse(request.query);
-  const userId = await resolvePerformanceUserId(query.userId);
-  const dashboard = await getPerformanceDashboard(userId);
+  const dashboard = await getPerformanceDashboard(query.userId);
   response.json(dashboard);
 });
 
