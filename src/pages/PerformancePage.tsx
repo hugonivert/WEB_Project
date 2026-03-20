@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import {
   CartesianGrid,
   Legend,
@@ -43,6 +44,7 @@ function formatPace(minutesPerKm: number | null) {
 }
 
 export default function PerformancePage() {
+  const navigate = useNavigate();
   const [dashboard, setDashboard] = useState<PerformanceDashboard | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -55,7 +57,10 @@ export default function PerformancePage() {
         setIsLoading(true);
         const session = readAuthSession();
         if (!session?.user.id) {
-          throw new Error("User session not found.");
+          if (isMounted) {
+            navigate("/login", { replace: true });
+          }
+          return;
         }
 
         const nextDashboard = await fetchPerformanceDashboard(session.user.id);
@@ -86,7 +91,7 @@ export default function PerformancePage() {
     return () => {
       isMounted = false;
     };
-  }, []);
+  }, [navigate]);
 
   const weeklyCards = useMemo(() => {
     if (!dashboard) {
