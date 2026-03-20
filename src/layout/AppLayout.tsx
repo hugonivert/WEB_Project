@@ -52,10 +52,9 @@ export default function AppLayout() {
       <aside className="app-sidebar">
         <div>
           <p className="sidebar-brand">FitQuest</p>
-          <h2 className="sidebar-title">Group starter kit</h2>
+          <h2 className="sidebar-title"></h2>
           <p className="sidebar-copy">
-            Navigation, pages and mock content are ready so each teammate can
-            work inside a dedicated area.
+            Welcome to FitQuest, your fitness companion! Track your workouts, complete missions, and climb the weekly leaderboard. 
           </p>
         </div>
 
@@ -83,16 +82,16 @@ export default function AppLayout() {
             <span>Weekly leaderboard</span>
           </div>
           {points === null ? (
-            <strong>Chargement…</strong>
+            <strong>Loading...</strong>
           ) : points === 0 ? (
-            <strong>Pas encore de points</strong>
+            <strong>No points yet</strong>
           ) : (
             <strong>
               {rank !== null ? `#${rank} – ` : ""}
               {points} pts
             </strong>
           )}
-          <p className="sidebar-copy">Points issus des missions complétées.</p>
+          <p className="sidebar-copy">Points earned from completed missions.</p>
         </div>
       </aside>
 

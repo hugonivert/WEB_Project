@@ -1,6 +1,13 @@
 import { SessionStatus, SportType } from "../generated/prisma/enums.js";
 import { prisma } from "../backend/src/lib/prisma.js";
 
+const at = (dayOffset: number, hour: number, minute: number) => {
+  const date = new Date();
+  date.setDate(date.getDate() + dayOffset);
+  date.setHours(hour, minute, 0, 0);
+  return date;
+};
+
 async function main() {
   const plannerUser = await prisma.user.upsert({
     where: {
@@ -24,15 +31,23 @@ async function main() {
     where: {
       id: "b0c6a59c-7ed7-47f6-aa60-5d8e8d9fa001",
     },
-    update: {},
+    update: {
+      title: "Threshold Run",
+      sport: SportType.RUNNING,
+      status: SessionStatus.PLANNED,
+      startAt: at(0, 18, 0),
+      endAt: at(0, 19, 0),
+      notes: "4 x 8 min at threshold pace",
+      location: "Track",
+    },
     create: {
       id: "b0c6a59c-7ed7-47f6-aa60-5d8e8d9fa001",
       userId: plannerUser.id,
       title: "Threshold Run",
       sport: SportType.RUNNING,
       status: SessionStatus.PLANNED,
-      startAt: new Date("2026-03-16T18:00:00.000Z"),
-      endAt: new Date("2026-03-16T19:00:00.000Z"),
+      startAt: at(0, 18, 0),
+      endAt: at(0, 19, 0),
       notes: "4 x 8 min at threshold pace",
       location: "Track",
     },
@@ -96,15 +111,28 @@ async function main() {
     where: {
       id: "d145ca78-c0b5-4d7c-8d86-6d33db5fa101",
     },
-    update: {},
+    update: {
+      title: "Tempo Run",
+      sport: SportType.RUNNING,
+      status: SessionStatus.COMPLETED,
+      startAt: at(-6, 17, 30),
+      endAt: at(-6, 18, 20),
+      notes: "3 x 10 min at tempo pace",
+      location: "Riverside loop",
+      completedData: {
+        distanceKm: 9.2,
+        durationMinutes: 50,
+        elevationGainM: 70,
+      },
+    },
     create: {
       id: "d145ca78-c0b5-4d7c-8d86-6d33db5fa101",
       userId: maya.id,
       title: "Tempo Run",
       sport: SportType.RUNNING,
       status: SessionStatus.COMPLETED,
-      startAt: new Date("2026-03-14T17:30:00.000Z"),
-      endAt: new Date("2026-03-14T18:20:00.000Z"),
+      startAt: at(-6, 17, 30),
+      endAt: at(-6, 18, 20),
       notes: "3 x 10 min at tempo pace",
       location: "Riverside loop",
       completedData: {
@@ -119,15 +147,28 @@ async function main() {
     where: {
       id: "3e6f299f-977b-47fe-af80-abf61484f202",
     },
-    update: {},
+    update: {
+      title: "Recovery Ride",
+      sport: SportType.CYCLING,
+      status: SessionStatus.COMPLETED,
+      startAt: at(-5, 9, 0),
+      endAt: at(-5, 10, 0),
+      notes: "Easy cadence and low power",
+      location: "City park",
+      completedData: {
+        distanceKm: 24.8,
+        durationMinutes: 60,
+        elevationGainM: 180,
+      },
+    },
     create: {
       id: "3e6f299f-977b-47fe-af80-abf61484f202",
       userId: noah.id,
       title: "Recovery Ride",
       sport: SportType.CYCLING,
       status: SessionStatus.COMPLETED,
-      startAt: new Date("2026-03-15T09:00:00.000Z"),
-      endAt: new Date("2026-03-15T10:00:00.000Z"),
+      startAt: at(-5, 9, 0),
+      endAt: at(-5, 10, 0),
       notes: "Easy cadence and low power",
       location: "City park",
       completedData: {
@@ -142,15 +183,28 @@ async function main() {
     where: {
       id: "5f92d957-2080-4af5-a51a-e5be0777a303",
     },
-    update: {},
+    update: {
+      title: "Upper Body Strength",
+      sport: SportType.GYM,
+      status: SessionStatus.COMPLETED,
+      startAt: at(-5, 16, 0),
+      endAt: at(-5, 17, 10),
+      notes: "Bench + pull-up focus",
+      location: "Athletic center",
+      completedData: {
+        exercisesCount: 6,
+        totalSets: 18,
+        totalLoadKg: 5420,
+      },
+    },
     create: {
       id: "5f92d957-2080-4af5-a51a-e5be0777a303",
       userId: lina.id,
       title: "Upper Body Strength",
       sport: SportType.GYM,
       status: SessionStatus.COMPLETED,
-      startAt: new Date("2026-03-15T16:00:00.000Z"),
-      endAt: new Date("2026-03-15T17:10:00.000Z"),
+      startAt: at(-5, 16, 0),
+      endAt: at(-5, 17, 10),
       notes: "Bench + pull-up focus",
       location: "Athletic center",
       completedData: {

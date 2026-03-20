@@ -24,7 +24,7 @@ export default function AvatarPage() {
 
         const session = readAuthSession();
         if (!session?.user.id) {
-          setErrorMessage("Not connected. Please log in again.");
+          setErrorMessage("Not signed in. Please sign in again.");
           setIsLoading(false);
           return;
         }

@@ -17,7 +17,7 @@ const loginSchema = z.object({
 });
 
 function buildMockToken(userId: string): string {
-  // NOTE: Token mock pour brancher le front. À remplacer par JWT/cookies.
+  // NOTE: Mock token used to wire the frontend. Replace with JWT/cookies.
   const payload = JSON.stringify({ userId, iat: Date.now() });
   return Buffer.from(payload).toString("base64url");
 }

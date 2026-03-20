@@ -126,9 +126,8 @@ export default function PerformancePage() {
     <div className="route-page">
       <PageHeader
         eyebrow="Performance"
-        title="Science-driven training analysis"
-        description="Weekly, monthly and cumulative analytics computed from completed sessions in your planner."
-        badge="Connected to planner sessions"
+        title="Training analysis"
+        description="Analytics computed from completed sessions in your planner."
       />
 
       {isLoading ? <p className="route-copy">Loading dashboard...</p> : null}
