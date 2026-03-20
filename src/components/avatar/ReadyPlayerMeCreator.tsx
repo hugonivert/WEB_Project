@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo } from "react";
 
 type ReadyPlayerMeCreatorProps = {
   subdomain: string;
@@ -43,8 +43,6 @@ export default function ReadyPlayerMeCreator({
   subdomain,
   onAvatarExported,
 }: ReadyPlayerMeCreatorProps) {
-  const [isReady, setIsReady] = useState(false);
-
   const creatorUrl = useMemo(() => {
     const url = new URL(`https://${subdomain}.readyplayer.me/avatar`);
     url.searchParams.set("frameApi", "");
@@ -68,7 +66,6 @@ export default function ReadyPlayerMeCreator({
         payload?.source === "readyplayerme" &&
         payload.eventName === "v1.frame.ready"
       ) {
-        setIsReady(true);
         return;
       }
 
@@ -85,17 +82,6 @@ export default function ReadyPlayerMeCreator({
 
   return (
     <div className="avatar-editor-shell">
-      <div className="avatar-editor-header">
-        <div>
-          <p className="eyebrow">Ready Player Me</p>
-          <p className="section-card-copy">
-            Use your application subdomain in production. The iframe exports a GLB URL that is saved
-            on the user profile.
-          </p>
-        </div>
-        <span className="owner-pill owner-pill-subtle">{isReady ? "Frame ready" : "Loading..."}</span>
-      </div>
-
       <iframe
         title="Ready Player Me avatar creator"
         src={creatorUrl}
