@@ -10,7 +10,7 @@ import {
   YAxis,
 } from "recharts";
 import { fetchPerformanceDashboard, type DeltaValue, type PerformanceDashboard } from "../api/performance";
-import { fetchTestProfile } from "../api/planner";
+import { readAuthSession } from "../lib/auth";
 import PageHeader from "../components/PageHeader";
 import SectionCard from "../components/SectionCard";
 
@@ -53,8 +53,12 @@ export default function PerformancePage() {
     async function loadDashboard() {
       try {
         setIsLoading(true);
-        const profile = await fetchTestProfile();
-        const nextDashboard = await fetchPerformanceDashboard(profile.id);
+        const session = readAuthSession();
+        if (!session?.user.id) {
+          throw new Error("User session not found.");
+        }
+
+        const nextDashboard = await fetchPerformanceDashboard(session.user.id);
 
         if (!isMounted) {
           return;
