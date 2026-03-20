@@ -28,9 +28,11 @@ export default function AvatarViewer({ avatarUrl, displayName }: AvatarViewerPro
         touch-action="pan-y"
         shadow-intensity="1"
         exposure="1"
-        camera-orbit="0deg 75deg 2.4m"
-        min-camera-orbit="auto 55deg 1.6m"
-        max-camera-orbit="auto 95deg 3.2m"
+        camera-target="0m 1m 0m"
+        camera-orbit="0deg 85deg 4.4m"
+        min-camera-orbit="auto 70deg 3.4m"
+        max-camera-orbit="auto 95deg 6m"
+        field-of-view="22deg"
         interaction-prompt="auto"
       />
     </div>
