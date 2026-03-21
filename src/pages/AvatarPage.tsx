@@ -77,15 +77,15 @@ export default function AvatarPage() {
         eyebrow="Avatar"
         title="Your avatar"
         description="See the avatar currently saved on your profile, then open the editor when you want to change it."
-        badge="Avataaars"
+        badge=""
       />
 
       {errorMessage ? <p className="avatar-error-text">{errorMessage}</p> : null}
 
       <div className="route-grid route-grid-1">
         <SectionCard
-          title="Your avatar"
-          description="This page only shows your current avatar. Use the button below to open the customization page."
+          title=""
+          description=""
         >
           {isLoading ? (
             <div className="avatar-viewer avatar-viewer-empty">

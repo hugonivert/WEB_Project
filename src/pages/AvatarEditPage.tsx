@@ -100,8 +100,8 @@ export default function AvatarEditPage() {
       <PageHeader
         eyebrow="Avatar"
         title="Modify your avatar"
-        description="Customize your avatar on this dedicated editor page, then save it to your profile."
-        badge="Avataaars"
+        description="Customize your avatar."
+        badge=""
       />
 
       <div className="avatar-page-actions">
@@ -115,7 +115,7 @@ export default function AvatarEditPage() {
       <div className="route-grid route-grid-2">
         <SectionCard
           title="Avatar creator"
-          description="Customize your Avataaars avatar directly in the page and save it to your profile."
+          description="Customize your avatar and save it to your profile."
         >
           <Suspense fallback={<p className="section-card-copy">Loading avatar editor...</p>}>
             <AvataaarsCreator

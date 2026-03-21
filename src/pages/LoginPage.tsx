@@ -150,14 +150,14 @@ export default function LoginPage() {
     <div className="login-shell">
       <div className="login-panel">
         <div>
-          <p className="eyebrow">FitQuest</p>
+          <p className="eyebrow"></p>
           <h1 className="login-title">
-            {isSignup ? "Create an account" : "Sign in"}
+            {isSignup ? "FitQuest" : "FitQuest"}
           </h1>
           <p className="route-copy">
             {isSignup
               ? "Create your account to access planning and performance stats."
-              : "Sign in to access your athlete dashboard."}
+              : ""}
           </p>
         </div>
 
@@ -291,12 +291,14 @@ export default function LoginPage() {
           </div>
         </form>
 
-        <div className="section-card login-notes">
-          <h2 className="section-card-title">Note</h2>
-          <p className="section-card-copy">
-          If you do not have an account yet, use "Create an account".
-          </p>
-        </div>
+        {!isSignup ? (
+          <div className="section-card login-notes">
+            <h2 className="section-card-title">Note</h2>
+            <p className="section-card-copy">
+              If you do not have an account yet, use "Create an account".
+            </p>
+          </div>
+        ) : null}
       </div>
     </div>
   );

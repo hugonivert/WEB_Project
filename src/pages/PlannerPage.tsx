@@ -436,10 +436,12 @@ export default function PlannerPage() {
     const total = events.length;
     const running = events.filter((event) => event.sport === "Running").length;
     const gym = events.filter((event) => event.sport === "Gym").length;
+    const cycling = events.filter((event) => event.sport === "Cycling").length;
+    const mobility = events.filter((event) => event.sport === "Mobility").length;
     const completed = events.filter(
       (event) => event.status === "COMPLETED",
     ).length;
-    return { total, running, gym, completed };
+    return { total, running, gym, cycling, mobility, completed };
   }, [events]);
 
   const todaySessions = useMemo(() => {
@@ -672,7 +674,7 @@ export default function PlannerPage() {
             <p className="eyebrow">Athlete Planner</p>
             <h1 className="page-title">Training Calendar</h1>
             <p className="page-copy">
-              Plan, edit and visualize your upcoming sports sessions.
+              Plan, edit and visualize your sports sessions.
             </p>
           </div>
 
@@ -766,12 +768,28 @@ export default function PlannerPage() {
             <p className="stat-value">{stats.completed}</p>
           </div>
           <div className="stat-card">
-            <p className="muted-label">Running</p>
+            <div className="stat-label">
+              <span>Running</span>
+            </div>
             <p className="stat-value">{stats.running}</p>
           </div>
           <div className="stat-card">
-            <p className="muted-label">Gym</p>
+            <div className="stat-label">
+              <span>Gym</span>
+            </div>
             <p className="stat-value">{stats.gym}</p>
+          </div>
+          <div className="stat-card">
+            <div className="stat-label">
+              <span>Cycling</span>
+            </div>
+            <p className="stat-value">{stats.cycling}</p>
+          </div>
+          <div className="stat-card">
+            <div className="stat-label">
+              <span>Mobility</span>
+            </div>
+            <p className="stat-value">{stats.mobility}</p>
           </div>
         </section>
 
@@ -779,7 +797,7 @@ export default function PlannerPage() {
           <div className="panel">
             <div className="panel-header">
               <div>
-                <h2 className="panel-title">Calendar overview</h2>
+                <h2 className="panel-title">Calendar</h2>
                 <p className="panel-copy">
                   Click a slot to create a session, or click an event to edit
                   it.

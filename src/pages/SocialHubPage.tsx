@@ -279,7 +279,7 @@ export default function SocialHubPage() {
       {activeTab === "feed" && (
         <SectionCard
           title="Activity feed"
-          description="Validated sessions from your friends."
+          description=""
         >
           <div className="stack-sm">
             {loadingFeed && (

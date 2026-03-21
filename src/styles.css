@@ -155,7 +155,7 @@ button {
 .app-sidebar {
   display: flex;
   flex-direction: column;
-  justify-content: space-between;
+  justify-content: flex-start;
   gap: 24px;
   position: sticky;
   top: 0;
@@ -207,6 +207,7 @@ button {
 }
 
 .sidebar-score-card {
+  margin-top: auto;
   border-radius: 20px;
   padding: 18px;
   background: rgba(30, 41, 59, 0.95);
@@ -651,15 +652,19 @@ button {
 
 .stats-grid {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 16px;
-  margin-bottom: 24px;
+  grid-template-columns: repeat(6, minmax(110px, 1fr));
+  gap: 10px;
+  margin-bottom: 18px;
 }
 
-.stat-card,
 .panel {
   border-radius: 24px;
   padding: 20px;
+}
+
+.stat-card {
+  border-radius: 18px;
+  padding: 14px;
 }
 
 .stat-label {
@@ -667,12 +672,14 @@ button {
   gap: 8px;
   align-items: center;
   color: #64748b;
+  font-size: 0.82rem;
 }
 
 .stat-value {
-  margin: 12px 0 0;
-  font-size: 2rem;
+  margin: 8px 0 0;
+  font-size: clamp(1.25rem, 2vw, 1.65rem);
   font-weight: 800;
+  line-height: 1.1;
 }
 
 .content-grid {
@@ -995,7 +1002,6 @@ button {
 
 @media (max-width: 1100px) {
   .app-shell,
-  .stats-grid,
   .content-grid,
   .avatar-hero-card,
   .avatar-hero-stats,
@@ -1010,6 +1016,10 @@ button {
     position: static;
     height: auto;
     overflow-y: visible;
+  }
+
+  .stats-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 }
 
@@ -1040,6 +1050,10 @@ button {
 
   .two-column-grid {
     grid-template-columns: 1fr;
+  }
+
+  .stats-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .field-span-two {

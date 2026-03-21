@@ -10,7 +10,7 @@ export default function AvatarViewer({ avatarUrl, displayName }: AvatarViewerPro
         <div>
           <p className="metric-value metric-value-small">No avatar yet</p>
           <p className="section-card-copy">
-            Create an Avataaars avatar and save it to your profile to see it here.
+            Create an avatar and save it to your profile to see it here.
           </p>
         </div>
       </div>
