@@ -6,6 +6,7 @@ import PlannerPage from "./pages/PlannerPage";
 import PerformancePage from "./pages/PerformancePage";
 import SocialHubPage from "./pages/SocialHubPage";
 import AvatarPage from "./pages/AvatarPage";
+import ProfilePage from "./pages/ProfilePage";
 import { AUTH_STORAGE_KEY, isLoggedIn } from "./lib/auth";
 
 export default function App() {
@@ -74,6 +75,12 @@ export default function App() {
             path="/avatar"
             element={
               loggedIn ? <AvatarPage /> : <Navigate to="/login" replace />
+            }
+          />
+          <Route
+            path="/profile/:userId"
+            element={
+              loggedIn ? <ProfilePage /> : <Navigate to="/login" replace />
             }
           />
         </Route>

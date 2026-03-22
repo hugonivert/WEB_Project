@@ -39,6 +39,9 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     const body = await response.text();
     throw new Error(body || `Request failed with status ${response.status}`);
   }
+  if (response.status === 204) {
+    return undefined as T;
+  }
   return response.json() as Promise<T>;
 }
 
@@ -64,6 +67,29 @@ export type FriendSuggestionDto = {
   avatarUrl: string | null;
   primarySport: SportType;
   completedSessions: number;
+  requestStatus?: "none" | "pending_sent" | "pending_received";
+};
+
+export type FriendRequestDto = {
+  id: string;
+  senderId: string;
+  senderDisplayName: string;
+  senderAvatarUrl: string | null;
+  createdAt: string;
+};
+
+export type UserProfileDto = {
+  id: string;
+  displayName: string;
+  avatarUrl: string | null;
+  totalPoints: number;
+  recentAchievements: Array<{
+    id: string;
+    title: string;
+    sport: SportType;
+    rewardPoints: number;
+    completedAt: string;
+  }>;
 };
 
 export type LeaderboardEntryDto = {
@@ -120,5 +146,62 @@ export function regenerateMission(missionId: string, userId: string, context: Us
   return request<{ mission: MissionDto }>(
     `/api/social/missions/${missionId}/regenerate`,
     { method: "POST", body: JSON.stringify({ userId, context }) },
+  );
+}
+
+export function removeFriend(userId: string, friendId: string) {
+  return request<void>("/api/social/friends", {
+    method: "DELETE",
+    body: JSON.stringify({ userId, friendId }),
+  });
+}
+
+export function sendFriendRequest(senderId: string, receiverId: string) {
+  return request<{ request: FriendRequestDto }>("/api/social/friend-requests", {
+    method: "POST",
+    body: JSON.stringify({ senderId, receiverId }),
+  });
+}
+
+export function acceptFriendRequest(requestId: string, userId: string) {
+  return request<{ friend: FriendDto }>(`/api/social/friend-requests/${requestId}/accept`, {
+    method: "PATCH",
+    body: JSON.stringify({ userId }),
+  });
+}
+
+export function rejectFriendRequest(requestId: string, userId: string) {
+  return request<void>(`/api/social/friend-requests/${requestId}/reject`, {
+    method: "PATCH",
+    body: JSON.stringify({ userId }),
+  });
+}
+
+export function fetchPendingRequests(userId: string) {
+  return request<{ requests: FriendRequestDto[] }>(
+    `/api/social/friend-requests/pending?userId=${encodeURIComponent(userId)}`,
+  );
+}
+
+export function fetchSentRequests(userId: string) {
+  return request<{ requests: FriendRequestDto[] }>(
+    `/api/social/friend-requests/sent?userId=${encodeURIComponent(userId)}`,
+  );
+}
+
+export function cancelFriendRequest(requestId: string, userId: string) {
+  return request<void>(`/api/social/friend-requests/${requestId}`, {
+    method: "DELETE",
+    body: JSON.stringify({ userId }),
+  });
+}
+
+export function fetchUserProfile(userId: string) {
+  return request<UserProfileDto>(`/api/social/profile/${encodeURIComponent(userId)}`);
+}
+
+export function searchUsers(userId: string, query: string) {
+  return request<{ results: FriendSuggestionDto[] }>(
+    `/api/social/users/search?userId=${encodeURIComponent(userId)}&q=${encodeURIComponent(query)}`,
   );
 }

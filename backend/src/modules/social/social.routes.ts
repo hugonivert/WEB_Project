@@ -3,7 +3,16 @@ import { z } from "zod";
 import {
   getFriends,
   getFriendSuggestions,
+  searchUsers,
   addFriend,
+  removeFriend,
+  sendFriendRequest,
+  acceptFriendRequest,
+  rejectFriendRequest,
+  cancelFriendRequest,
+  getPendingRequests,
+  getSentRequests,
+  getUserProfile,
   getUserMissions,
   generateAndSaveMissions,
   toggleMissionComplete,
@@ -64,6 +73,126 @@ socialRouter.post("/friends", async (request, response) => {
   } catch (error) {
     const detail = error instanceof Error ? error.message : "Failed to add friend";
     response.status(400).json({ error: detail });
+  }
+});
+
+// GET /api/social/users/search?userId=&q=
+socialRouter.get("/users/search", async (request, response) => {
+  const userId = request.query["userId"] as string;
+  const q = (request.query["q"] as string) ?? "";
+  if (!userId) { response.status(400).json({ error: "userId is required" }); return; }
+  try {
+    const results = await searchUsers(userId, q);
+    response.json({ results });
+  } catch (error) {
+    console.error("[social] GET /users/search failed:", error);
+    response.status(500).json({ error: "Search failed" });
+  }
+});
+
+// DELETE /api/social/friends
+socialRouter.delete("/friends", async (request, response) => {
+  const body = z.object({ userId: z.string(), friendId: z.string() }).safeParse(request.body);
+  if (!body.success) { response.status(400).json({ error: body.error.flatten() }); return; }
+  try {
+    await removeFriend(body.data.userId, body.data.friendId);
+    response.status(204).send();
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : "Failed to remove friend";
+    response.status(400).json({ error: detail });
+  }
+});
+
+// GET /api/social/friend-requests/pending?userId=...
+socialRouter.get("/friend-requests/pending", async (request, response) => {
+  const userId = request.query["userId"] as string;
+  if (!userId) { response.status(400).json({ error: "userId is required" }); return; }
+  try {
+    const requests = await getPendingRequests(userId);
+    response.json({ requests });
+  } catch (error) {
+    console.error("[social] GET /friend-requests/pending failed:", error);
+    response.status(500).json({ error: "Failed to load pending requests" });
+  }
+});
+
+// POST /api/social/friend-requests
+socialRouter.post("/friend-requests", async (request, response) => {
+  const body = z.object({ senderId: z.string(), receiverId: z.string() }).safeParse(request.body);
+  if (!body.success) { response.status(400).json({ error: body.error.flatten() }); return; }
+  try {
+    const req = await sendFriendRequest(body.data.senderId, body.data.receiverId);
+    response.status(201).json({ request: req });
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : "Failed to send friend request";
+    response.status(400).json({ error: detail });
+  }
+});
+
+// PATCH /api/social/friend-requests/:id/accept
+socialRouter.patch("/friend-requests/:id/accept", async (request, response) => {
+  const { id } = request.params;
+  const body = z.object({ userId: z.string() }).safeParse(request.body);
+  if (!body.success) { response.status(400).json({ error: body.error.flatten() }); return; }
+  try {
+    const friend = await acceptFriendRequest(id, body.data.userId);
+    response.json({ friend });
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : "Failed to accept request";
+    response.status(400).json({ error: detail });
+  }
+});
+
+// GET /api/social/friend-requests/sent?userId=...
+socialRouter.get("/friend-requests/sent", async (request, response) => {
+  const userId = request.query["userId"] as string;
+  if (!userId) { response.status(400).json({ error: "userId is required" }); return; }
+  try {
+    const requests = await getSentRequests(userId);
+    response.json({ requests });
+  } catch (error) {
+    console.error("[social] GET /friend-requests/sent failed:", error);
+    response.status(500).json({ error: "Failed to load sent requests" });
+  }
+});
+
+// DELETE /api/social/friend-requests/:id
+socialRouter.delete("/friend-requests/:id", async (request, response) => {
+  const { id } = request.params;
+  const body = z.object({ userId: z.string() }).safeParse(request.body);
+  if (!body.success) { response.status(400).json({ error: body.error.flatten() }); return; }
+  try {
+    await cancelFriendRequest(id, body.data.userId);
+    response.status(204).send();
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : "Failed to cancel request";
+    response.status(400).json({ error: detail });
+  }
+});
+
+// PATCH /api/social/friend-requests/:id/reject
+socialRouter.patch("/friend-requests/:id/reject", async (request, response) => {
+  const { id } = request.params;
+  const body = z.object({ userId: z.string() }).safeParse(request.body);
+  if (!body.success) { response.status(400).json({ error: body.error.flatten() }); return; }
+  try {
+    await rejectFriendRequest(id, body.data.userId);
+    response.status(204).send();
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : "Failed to reject request";
+    response.status(400).json({ error: detail });
+  }
+});
+
+// GET /api/social/profile/:userId
+socialRouter.get("/profile/:userId", async (request, response) => {
+  const { userId } = request.params;
+  try {
+    const profile = await getUserProfile(userId);
+    response.json(profile);
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : "Failed to load profile";
+    response.status(404).json({ error: detail });
   }
 });
 

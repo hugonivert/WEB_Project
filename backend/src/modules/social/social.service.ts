@@ -73,13 +73,34 @@ export type FriendSuggestionDto = {
   avatarUrl: string | null;
   primarySport: string;
   completedSessions: number;
+  requestStatus?: "none" | "pending_sent" | "pending_received";
+};
+
+export type FriendRequestDto = {
+  id: string;
+  senderId: string;
+  senderDisplayName: string;
+  senderAvatarUrl: string | null;
+  createdAt: string;
+};
+
+export type UserProfileDto = {
+  id: string;
+  displayName: string;
+  avatarUrl: string | null;
+  totalPoints: number;
+  recentAchievements: Array<{
+    id: string;
+    title: string;
+    sport: string;
+    rewardPoints: number;
+    completedAt: string;
+  }>;
 };
 
 const devMissionsStore: DevMission[] = [];
 const devRewardStore: Record<string, number> = {};
-const devDisplayNames: Record<string, string> = {
-  [DEV_PROFILE.id]: DEV_PROFILE.displayName,
-};
+const devDisplayNames: Record<string, string> = {};
 
 function getWeekStart(): string {
   const now = new Date();
@@ -104,6 +125,29 @@ const prismaFriendship = prisma as typeof prisma & {
   friendship: {
     findMany: (args: unknown) => Promise<Array<Record<string, unknown>>>;
     upsert: (args: unknown) => Promise<unknown>;
+    deleteMany: (args: unknown) => Promise<unknown>;
+  };
+};
+
+type RawFriendRequest = {
+  id: string;
+  senderId: string;
+  receiverId: string;
+  status: string;
+  createdAt: Date;
+  updatedAt: Date;
+  sender?: { id: string; displayName: string; avatarUrl: string | null };
+  receiver?: { id: string; displayName: string; avatarUrl: string | null };
+};
+
+const prismaFriendReq = prisma as typeof prisma & {
+  friendRequest: {
+    findMany: (args: unknown) => Promise<RawFriendRequest[]>;
+    findFirst: (args: unknown) => Promise<RawFriendRequest | null>;
+    create: (args: unknown) => Promise<RawFriendRequest>;
+    update: (args: unknown) => Promise<RawFriendRequest>;
+    delete: (args: unknown) => Promise<RawFriendRequest>;
+    deleteMany: (args: unknown) => Promise<unknown>;
   };
 };
 
@@ -257,26 +301,31 @@ export async function getFriendSuggestions(userId: string): Promise<FriendSugges
   const friendIds = await getFriendIds(userId);
   const excluded = new Set([userId, ...friendIds, DEV_PROFILE.id]);
 
+  // Tolerant fetch of pending requests (table may not exist yet before prisma:push)
+  let rawPending: Array<{ senderId: string; receiverId: string }> = [];
+  try {
+    rawPending = await prismaFriendReq.friendRequest.findMany({
+      where: { OR: [{ senderId: userId }, { receiverId: userId }], status: "PENDING" },
+      select: { senderId: true, receiverId: true },
+    }) as Array<{ senderId: string; receiverId: string }>;
+  } catch { /* table not yet created */ }
+
+  const pendingSentIds = new Set(rawPending.map((r) => r.receiverId));
+  const pendingReceivedIds = new Set(rawPending.map((r) => r.senderId));
+
   const users = await prisma.user.findMany({
     where: {
       id: { notIn: Array.from(excluded) },
       passwordHash: { not: null },
     },
     take: 8,
-    include: {
-      profile: {
-        select: { primarySport: true },
-      },
-    },
+    include: { profile: { select: { primarySport: true } } },
     orderBy: { createdAt: "desc" },
   });
 
   const completedByUser = await prisma.trainingSession.groupBy({
     by: ["userId"],
-    where: {
-      userId: { in: users.map((u) => u.id) },
-      status: "COMPLETED",
-    },
+    where: { userId: { in: users.map((u) => u.id) }, status: "COMPLETED" },
     _count: { _all: true },
   });
 
@@ -289,6 +338,11 @@ export async function getFriendSuggestions(userId: string): Promise<FriendSugges
       avatarUrl: user.avatarUrl,
       primarySport: user.profile?.primarySport ?? "OTHER",
       completedSessions: completedMap[user.id] ?? 0,
+      requestStatus: pendingSentIds.has(user.id)
+        ? ("pending_sent" as const)
+        : pendingReceivedIds.has(user.id)
+          ? ("pending_received" as const)
+          : ("none" as const),
     }))
     .sort((a, b) => b.completedSessions - a.completedSessions)
     .slice(0, 5);
@@ -608,11 +662,12 @@ export async function getTotalPoints(userId: string): Promise<number> {
 
 export async function getFeed(userId: string): Promise<FeedPostDto[]> {
   const friendIds = (await getFriendIds(userId)).filter((id) => id !== DEV_PROFILE.id);
-  if (friendIds.length === 0) return [];
+  // Always include the user's own activities (even with no friends)
+  const allIds = [userId, ...friendIds];
 
   const sessions = await prisma.trainingSession.findMany({
     where: {
-      userId: { in: friendIds },
+      userId: { in: allIds },
       status: "COMPLETED",
     },
     orderBy: { updatedAt: "desc" },
@@ -626,7 +681,7 @@ export async function getFeed(userId: string): Promise<FeedPostDto[]> {
 
   const completedMissions = await prisma.userChallenge.findMany({
     where: {
-      userId: { in: friendIds },
+      userId: { in: allIds },
       completedAt: { not: null },
     },
     orderBy: { completedAt: "desc" },
@@ -677,10 +732,240 @@ export async function getFeed(userId: string): Promise<FeedPostDto[]> {
     .slice(0, 30);
 }
 
+export async function searchUsers(userId: string, query: string): Promise<FriendSuggestionDto[]> {
+  if (!query.trim()) return [];
+
+  const friendIds = await getFriendIds(userId);
+  const excluded = new Set([userId, ...friendIds, DEV_PROFILE.id]);
+
+  const users = await prisma.user.findMany({
+    where: {
+      id: { notIn: Array.from(excluded) },
+      passwordHash: { not: null },
+      displayName: { contains: query, mode: "insensitive" },
+    },
+    take: 10,
+    include: { profile: { select: { primarySport: true } } },
+  });
+
+  let rawPending: Array<{ senderId: string; receiverId: string }> = [];
+  try {
+    rawPending = await prismaFriendReq.friendRequest.findMany({
+      where: { OR: [{ senderId: userId }, { receiverId: userId }], status: "PENDING" },
+      select: { senderId: true, receiverId: true },
+    }) as Array<{ senderId: string; receiverId: string }>;
+  } catch { /* table not yet created */ }
+
+  const pendingSentIds = new Set(rawPending.map((r) => r.receiverId));
+  const pendingReceivedIds = new Set(rawPending.map((r) => r.senderId));
+
+  return users.map((user) => ({
+    id: user.id,
+    displayName: user.displayName,
+    avatarUrl: user.avatarUrl,
+    primarySport: user.profile?.primarySport ?? "OTHER",
+    completedSessions: 0,
+    requestStatus: pendingSentIds.has(user.id)
+      ? ("pending_sent" as const)
+      : pendingReceivedIds.has(user.id)
+        ? ("pending_received" as const)
+        : ("none" as const),
+  }));
+}
+
+export async function getSentRequests(userId: string): Promise<FriendRequestDto[]> {
+  try {
+    const requests = await prismaFriendReq.friendRequest.findMany({
+      where: { senderId: userId, status: "PENDING" },
+      include: { receiver: { select: { id: true, displayName: true, avatarUrl: true } } },
+      orderBy: { createdAt: "desc" },
+    });
+    return requests.map((req) => ({
+      id: req.id,
+      senderId: req.senderId,
+      senderDisplayName: req.receiver?.displayName ?? "",
+      senderAvatarUrl: req.receiver?.avatarUrl ?? null,
+      createdAt: req.createdAt.toISOString(),
+    }));
+  } catch {
+    return [];
+  }
+}
+
+export async function cancelFriendRequest(requestId: string, senderId: string): Promise<void> {
+  const req = await prismaFriendReq.friendRequest.findFirst({
+    where: { id: requestId, senderId, status: "PENDING" },
+  });
+  if (!req) throw new Error("Friend request not found");
+  await prismaFriendReq.friendRequest.delete({ where: { id: requestId } });
+}
+
+export async function removeFriend(userId: string, friendId: string): Promise<void> {
+  const pair = normalizeFriendPair(userId, friendId);
+  await prismaFriendship.friendship.deleteMany({
+    where: {
+      OR: [
+        { userId: pair.userId, friendId: pair.friendId },
+        { userId: pair.friendId, friendId: pair.userId },
+      ],
+    },
+  });
+  // Clean up any FriendRequest records so they can add each other again later
+  try {
+    await prismaFriendReq.friendRequest.deleteMany({
+      where: {
+        OR: [
+          { senderId: userId, receiverId: friendId },
+          { senderId: friendId, receiverId: userId },
+        ],
+      },
+    });
+  } catch { /* table may not exist yet */ }
+}
+
+export async function sendFriendRequest(senderId: string, receiverId: string): Promise<FriendRequestDto> {
+  if (senderId === receiverId) throw new Error("Cannot send a friend request to yourself");
+
+  const friendIds = await getFriendIds(senderId);
+  if (friendIds.includes(receiverId)) throw new Error("Already friends");
+
+  try {
+    // Delete any stale record (ACCEPTED after unfriend, or REJECTED) to avoid unique constraint violation
+    await prismaFriendReq.friendRequest.deleteMany({
+      where: {
+        OR: [
+          { senderId, receiverId, status: { not: "PENDING" } },
+          { senderId: receiverId, receiverId: senderId, status: { not: "PENDING" } },
+        ],
+      },
+    });
+    const pending = await prismaFriendReq.friendRequest.findFirst({
+      where: {
+        OR: [
+          { senderId, receiverId },
+          { senderId: receiverId, receiverId: senderId },
+        ],
+        status: "PENDING",
+      },
+    });
+    if (pending) throw new Error("A pending request already exists");
+  } catch (err) {
+    if (err instanceof Error && err.message === "A pending request already exists") throw err;
+    // table not yet created — continue
+  }
+
+  const req = await prismaFriendReq.friendRequest.create({
+    data: { senderId, receiverId, status: "PENDING" },
+    include: { sender: { select: { id: true, displayName: true, avatarUrl: true } } },
+  });
+
+  return {
+    id: req.id,
+    senderId: req.senderId,
+    senderDisplayName: req.sender?.displayName ?? "",
+    senderAvatarUrl: req.sender?.avatarUrl ?? null,
+    createdAt: req.createdAt.toISOString(),
+  };
+}
+
+export async function acceptFriendRequest(requestId: string, userId: string): Promise<FriendDto> {
+  const req = await prismaFriendReq.friendRequest.findFirst({
+    where: { id: requestId, receiverId: userId, status: "PENDING" },
+    include: { sender: { select: { id: true, displayName: true, avatarUrl: true } } },
+  });
+  if (!req) throw new Error("Friend request not found");
+
+  await prismaFriendReq.friendRequest.update({
+    where: { id: requestId },
+    data: { status: "ACCEPTED" },
+  });
+
+  const pair = normalizeFriendPair(userId, req.senderId);
+  await prismaFriendship.friendship.upsert({
+    where: { userId_friendId: { userId: pair.userId, friendId: pair.friendId } },
+    update: {},
+    create: { userId: pair.userId, friendId: pair.friendId },
+  });
+
+  return {
+    id: req.sender?.id ?? req.senderId,
+    displayName: req.sender?.displayName ?? "",
+    avatarUrl: req.sender?.avatarUrl ?? null,
+    friendshipCreatedAt: new Date().toISOString(),
+  };
+}
+
+export async function rejectFriendRequest(requestId: string, userId: string): Promise<void> {
+  const req = await prismaFriendReq.friendRequest.findFirst({
+    where: { id: requestId, receiverId: userId, status: "PENDING" },
+  });
+  if (!req) throw new Error("Friend request not found");
+
+  await prismaFriendReq.friendRequest.update({
+    where: { id: requestId },
+    data: { status: "REJECTED" },
+  });
+}
+
+export async function getPendingRequests(userId: string): Promise<FriendRequestDto[]> {
+  try {
+    const requests = await prismaFriendReq.friendRequest.findMany({
+      where: { receiverId: userId, status: "PENDING" },
+      include: { sender: { select: { id: true, displayName: true, avatarUrl: true } } },
+      orderBy: { createdAt: "desc" },
+    });
+    return requests.map((req) => ({
+      id: req.id,
+      senderId: req.senderId,
+      senderDisplayName: req.sender?.displayName ?? "",
+      senderAvatarUrl: req.sender?.avatarUrl ?? null,
+      createdAt: req.createdAt.toISOString(),
+    }));
+  } catch {
+    return []; // table not yet created
+  }
+}
+
+export async function getUserProfile(userId: string): Promise<UserProfileDto> {
+  const [user, totalPointsResult, recentAchievements] = await Promise.all([
+    prisma.user.findUnique({
+      where: { id: userId },
+      select: { id: true, displayName: true, avatarUrl: true },
+    }),
+    prisma.rewardEvent.aggregate({
+      where: { userId },
+      _sum: { points: true },
+    }),
+    prisma.userChallenge.findMany({
+      where: { userId, completedAt: { not: null } },
+      orderBy: { completedAt: "desc" },
+      take: 10,
+      include: { challenge: { select: { title: true, sport: true, rewardPoints: true } } },
+    }),
+  ]);
+
+  if (!user) throw new Error("User not found");
+
+  return {
+    id: user.id,
+    displayName: user.displayName,
+    avatarUrl: user.avatarUrl,
+    totalPoints: totalPointsResult._sum.points ?? 0,
+    recentAchievements: recentAchievements.map((uc) => ({
+      id: uc.id,
+      title: uc.challenge.title,
+      sport: uc.challenge.sport ?? "OTHER",
+      rewardPoints: uc.challenge.rewardPoints,
+      completedAt: uc.completedAt!.toISOString(),
+    })),
+  };
+}
+
 export async function getLeaderboard(): Promise<LeaderboardEntryDto[]> {
   try {
     const groups = await prisma.rewardEvent.groupBy({
       by: ["userId"],
+      where: { userId: { not: DEV_PROFILE.id } },
       _sum: { points: true },
       orderBy: { _sum: { points: "desc" } },
       take: 10,
@@ -700,6 +985,7 @@ export async function getLeaderboard(): Promise<LeaderboardEntryDto[]> {
   } catch (error) {
     if (!canFallback(error)) throw error;
     return Object.entries(devRewardStore)
+      .filter(([uid]) => uid !== DEV_PROFILE.id)
       .sort(([, a], [, b]) => b - a)
       .slice(0, 10)
       .map(([uid, pts], i) => ({
