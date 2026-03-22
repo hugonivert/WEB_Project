@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
+import { useNavigate } from "react-router-dom";
 import PageHeader from "../components/PageHeader";
 import SectionCard from "../components/SectionCard";
 import {
@@ -6,7 +7,14 @@ import {
   fetchFeed,
   fetchFriends,
   fetchFriendSuggestions,
-  addFriend,
+  fetchPendingRequests,
+  fetchSentRequests,
+  sendFriendRequest,
+  acceptFriendRequest,
+  rejectFriendRequest,
+  cancelFriendRequest,
+  removeFriend,
+  searchUsers,
   fetchLeaderboard,
   generateMissions,
   toggleMissionComplete,
@@ -15,6 +23,7 @@ import {
   type FeedPostDto,
   type FriendDto,
   type FriendSuggestionDto,
+  type FriendRequestDto,
   type LeaderboardEntryDto,
   type SportType,
 } from "../api/social";
@@ -91,6 +100,7 @@ function ProgressCircle({
 // ─── Main page ───────────────────────────────────────────────────────────────
 
 export default function SocialHubPage() {
+  const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState<SocialTab>("feed");
   const [userId, setUserId] = useState<string | null>(null);
 
@@ -106,10 +116,18 @@ export default function SocialHubPage() {
   // Feed state
   const [feedPosts, setFeedPosts] = useState<FeedPostDto[]>([]);
   const [loadingFeed, setLoadingFeed] = useState(false);
+
+  // Friends state
   const [friends, setFriends] = useState<FriendDto[]>([]);
   const [friendSuggestions, setFriendSuggestions] = useState<FriendSuggestionDto[]>([]);
+  const [pendingRequests, setPendingRequests] = useState<FriendRequestDto[]>([]);
+  const [sentRequests, setSentRequests] = useState<FriendRequestDto[]>([]);
   const [loadingFriends, setLoadingFriends] = useState(false);
-  const [addingFriendId, setAddingFriendId] = useState<string | null>(null);
+  const [actionFriendId, setActionFriendId] = useState<string | null>(null);
+  const [actionRequestId, setActionRequestId] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [searchResults, setSearchResults] = useState<FriendSuggestionDto[]>([]);
+  const [searching, setSearching] = useState(false);
 
   // Leaderboard state
   const [leaderboardEntries, setLeaderboardEntries] = useState<LeaderboardEntryDto[]>([]);
@@ -152,15 +170,20 @@ export default function SocialHubPage() {
   const loadFriends = useCallback(async (uid: string) => {
     setLoadingFriends(true);
     try {
-      const [friendData, suggestionData] = await Promise.all([
+      const [friendData, suggestionData, requestData, sentData] = await Promise.all([
         fetchFriends(uid),
         fetchFriendSuggestions(uid),
+        fetchPendingRequests(uid),
+        fetchSentRequests(uid),
       ]);
       setFriends(friendData.friends);
       setFriendSuggestions(suggestionData.suggestions);
+      setPendingRequests(requestData.requests);
+      setSentRequests(sentData.requests);
     } catch {
       setFriends([]);
       setFriendSuggestions([]);
+      setPendingRequests([]);
     } finally {
       setLoadingFriends(false);
     }
@@ -236,16 +259,80 @@ export default function SocialHubPage() {
     }
   }
 
-  async function handleAddFriend(friendId: string) {
+  async function handleSendRequest(receiverId: string) {
     if (!userId) return;
-    setAddingFriendId(friendId);
+    setActionFriendId(receiverId);
     try {
-      await addFriend(userId, friendId);
-      await Promise.all([loadFriends(userId), loadFeed(userId)]);
-    } finally {
-      setAddingFriendId(null);
+      await sendFriendRequest(userId, receiverId);
+      await loadFriends(userId);
+    } catch { /* ignore */ } finally {
+      setActionFriendId(null);
     }
   }
+
+  async function handleAcceptRequest(requestId: string) {
+    if (!userId) return;
+    setActionRequestId(requestId);
+    try {
+      await acceptFriendRequest(requestId, userId);
+      await Promise.all([loadFriends(userId), loadFeed(userId)]);
+    } catch { /* ignore */ } finally {
+      setActionRequestId(null);
+    }
+  }
+
+  async function handleRejectRequest(requestId: string) {
+    if (!userId) return;
+    setActionRequestId(requestId);
+    try {
+      await rejectFriendRequest(requestId, userId);
+      await loadFriends(userId);
+    } catch { /* ignore */ } finally {
+      setActionRequestId(null);
+    }
+  }
+
+  async function handleCancelRequest(requestId: string) {
+    if (!userId) return;
+    setActionRequestId(requestId);
+    try {
+      await cancelFriendRequest(requestId, userId);
+      setSentRequests((prev) => prev.filter((r) => r.id !== requestId));
+      await loadFriends(userId);
+    } catch { /* ignore */ } finally {
+      setActionRequestId(null);
+    }
+  }
+
+  async function handleRemoveFriend(friendId: string) {
+    if (!userId) return;
+    setActionFriendId(friendId);
+    try {
+      await removeFriend(userId, friendId);
+      await Promise.all([loadFriends(userId), loadFeed(userId)]);
+    } catch { /* ignore */ } finally {
+      setActionFriendId(null);
+    }
+  }
+
+  useEffect(() => {
+    if (!userId || !searchQuery.trim()) {
+      setSearchResults([]);
+      return;
+    }
+    const timer = setTimeout(async () => {
+      setSearching(true);
+      try {
+        const data = await searchUsers(userId, searchQuery);
+        setSearchResults(data.results);
+      } catch {
+        setSearchResults([]);
+      } finally {
+        setSearching(false);
+      }
+    }, 350);
+    return () => clearTimeout(timer);
+  }, [searchQuery, userId]);
 
   const completedCount = missions.filter((m) => m.completed).length;
 
@@ -351,9 +438,80 @@ export default function SocialHubPage() {
       {activeTab === "friends" && (
         <SectionCard
           title="Friends"
-          description="Add your friends and discover athletes from the platform."
+          description="Manage your friends and discover athletes from the platform."
         >
           <div className="stack-sm">
+
+            {/* Pending friend requests */}
+            {!loadingFriends && pendingRequests.length > 0 && (
+              <div className="mini-panel" style={{ borderLeft: "3px solid #f59e0b" }}>
+                <strong style={{ color: "#b45309" }}>
+                  Friend requests ({pendingRequests.length})
+                </strong>
+                {pendingRequests.map((req) => (
+                  <div
+                    key={req.id}
+                    style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "0.75rem", marginTop: "0.6rem", flexWrap: "wrap" }}
+                  >
+                    <div>
+                      <strong>{req.senderDisplayName}</strong>
+                      <p className="section-card-copy" style={{ margin: 0 }}>wants to be your friend</p>
+                    </div>
+                    <div style={{ display: "flex", gap: "0.5rem" }}>
+                      <button
+                        type="button"
+                        className="primary-button"
+                        style={{ padding: "0.35rem 0.7rem", fontSize: "0.82rem" }}
+                        disabled={actionRequestId === req.id}
+                        onClick={() => handleAcceptRequest(req.id)}
+                      >
+                        {actionRequestId === req.id ? "…" : "Accept"}
+                      </button>
+                      <button
+                        type="button"
+                        className="secondary-button"
+                        style={{ padding: "0.35rem 0.7rem", fontSize: "0.82rem" }}
+                        disabled={actionRequestId === req.id}
+                        onClick={() => handleRejectRequest(req.id)}
+                      >
+                        Reject
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* Sent requests */}
+            {!loadingFriends && sentRequests.length > 0 && (
+              <div className="mini-panel" style={{ borderLeft: "3px solid #6366f1" }}>
+                <strong style={{ color: "#4338ca" }}>
+                  Sent requests ({sentRequests.length})
+                </strong>
+                {sentRequests.map((req) => (
+                  <div
+                    key={req.id}
+                    style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "0.75rem", marginTop: "0.6rem", flexWrap: "wrap" }}
+                  >
+                    <div>
+                      <strong>{req.senderDisplayName}</strong>
+                      <p className="section-card-copy" style={{ margin: 0 }}>Waiting for response…</p>
+                    </div>
+                    <button
+                      type="button"
+                      className="secondary-button"
+                      style={{ padding: "0.35rem 0.7rem", fontSize: "0.82rem", color: "#dc2626" }}
+                      disabled={actionRequestId === req.id}
+                      onClick={() => handleCancelRequest(req.id)}
+                    >
+                      {actionRequestId === req.id ? "…" : "Cancel"}
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* Friend list */}
             <div className="mini-panel">
               <strong>Your friends</strong>
               {loadingFriends && <p className="section-card-copy">Loading friends...</p>}
@@ -363,22 +521,119 @@ export default function SocialHubPage() {
               {!loadingFriends && friends.map((friend) => (
                 <div
                   key={friend.id}
-                  style={{
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "space-between",
-                    gap: "0.75rem",
-                    marginTop: "0.6rem",
-                  }}
+                  style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "0.75rem", marginTop: "0.6rem", flexWrap: "wrap" }}
                 >
                   <div>
                     <strong>{friend.displayName}</strong>
-                    <p className="section-card-copy">Connected account</p>
+                    <p className="section-card-copy" style={{ margin: 0 }}>Connected athlete</p>
+                  </div>
+                  <div style={{ display: "flex", gap: "0.5rem" }}>
+                    <button
+                      type="button"
+                      className="secondary-button"
+                      style={{ padding: "0.35rem 0.7rem", fontSize: "0.82rem" }}
+                      onClick={() => navigate(`/profile/${friend.id}`)}
+                    >
+                      View profile
+                    </button>
+                    <button
+                      type="button"
+                      className="secondary-button"
+                      style={{ padding: "0.35rem 0.7rem", fontSize: "0.82rem", color: "#dc2626" }}
+                      disabled={actionFriendId === friend.id}
+                      onClick={() => handleRemoveFriend(friend.id)}
+                    >
+                      {actionFriendId === friend.id ? "…" : "Remove"}
+                    </button>
                   </div>
                 </div>
               ))}
             </div>
 
+            {/* Search */}
+            <div className="mini-panel">
+              <strong>Search athletes</strong>
+              <input
+                type="text"
+                className="field-input"
+                placeholder="Search by name…"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                style={{ marginTop: "0.6rem" }}
+              />
+              {searching && <p className="section-card-copy" style={{ marginTop: 6 }}>Searching…</p>}
+              {!searching && searchQuery.trim() && searchResults.length === 0 && (
+                <p className="section-card-copy" style={{ marginTop: 6 }}>No results found.</p>
+              )}
+              {!searching && searchResults.map((user) => (
+                <div
+                  key={user.id}
+                  style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "0.75rem", marginTop: "0.6rem", flexWrap: "wrap" }}
+                >
+                  <div>
+                    <strong>{user.displayName}</strong>
+                    <p className="section-card-copy" style={{ margin: 0 }}>
+                      {SPORT_ICONS[user.primarySport]} {user.primarySport.toLowerCase()}
+                    </p>
+                  </div>
+                  <div style={{ display: "flex", gap: "0.5rem" }}>
+                    <button
+                      type="button"
+                      className="secondary-button"
+                      style={{ padding: "0.35rem 0.7rem", fontSize: "0.82rem" }}
+                      onClick={() => navigate(`/profile/${user.id}`)}
+                    >
+                      Profile
+                    </button>
+                    {user.requestStatus === "pending_sent" ? (
+                      <button
+                        type="button"
+                        className="secondary-button"
+                        style={{ padding: "0.35rem 0.7rem", fontSize: "0.82rem", color: "#dc2626" }}
+                        disabled={actionRequestId !== null}
+                        onClick={() => {
+                          const req = sentRequests.find((r) => r.senderDisplayName === user.displayName);
+                          if (req) handleCancelRequest(req.id);
+                          else loadFriends(userId!);
+                        }}
+                      >
+                        Cancel request
+                      </button>
+                    ) : user.requestStatus === "pending_received" ? (
+                      <button
+                        type="button"
+                        className="primary-button"
+                        style={{ padding: "0.35rem 0.7rem", fontSize: "0.82rem" }}
+                        disabled={actionRequestId !== null}
+                        onClick={() => {
+                          const req = pendingRequests.find((r) => r.senderId === user.id);
+                          if (req) handleAcceptRequest(req.id);
+                        }}
+                      >
+                        Accept
+                      </button>
+                    ) : (
+                      <button
+                        type="button"
+                        className="primary-button"
+                        style={{ padding: "0.35rem 0.7rem", fontSize: "0.82rem" }}
+                        disabled={actionFriendId === user.id}
+                        onClick={async () => {
+                          await handleSendRequest(user.id);
+                          setSearchResults((prev) =>
+                            prev.map((u) => u.id === user.id ? { ...u, requestStatus: "pending_sent" } : u)
+                          );
+                        }}
+                      >
+                        {actionFriendId === user.id ? "Sending…" : "Add friend"}
+                      </button>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* Suggestions */}
             <div className="mini-panel">
               <strong>Suggested accounts</strong>
               {loadingFriends && <p className="section-card-copy">Loading suggestions...</p>}
@@ -388,29 +643,62 @@ export default function SocialHubPage() {
               {!loadingFriends && friendSuggestions.map((suggestion) => (
                 <div
                   key={suggestion.id}
-                  style={{
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "space-between",
-                    gap: "0.75rem",
-                    marginTop: "0.6rem",
-                  }}
+                  style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "0.75rem", marginTop: "0.6rem", flexWrap: "wrap" }}
                 >
                   <div>
                     <strong>{suggestion.displayName}</strong>
-                    <p className="section-card-copy">
-                      {SPORT_ICONS[suggestion.primarySport]} {suggestion.primarySport.toLowerCase()} · {suggestion.completedSessions} completed session{suggestion.completedSessions > 1 ? "s" : ""}
+                    <p className="section-card-copy" style={{ margin: 0 }}>
+                      {SPORT_ICONS[suggestion.primarySport]} {suggestion.primarySport.toLowerCase()} · {suggestion.completedSessions} session{suggestion.completedSessions !== 1 ? "s" : ""}
                     </p>
                   </div>
-                  <button
-                    type="button"
-                    className="primary-button"
-                    onClick={() => handleAddFriend(suggestion.id)}
-                    disabled={addingFriendId === suggestion.id}
-                    style={{ padding: "0.4rem 0.75rem" }}
-                  >
-                    {addingFriendId === suggestion.id ? "Adding..." : "Add"}
-                  </button>
+                  <div style={{ display: "flex", gap: "0.5rem" }}>
+                    <button
+                      type="button"
+                      className="secondary-button"
+                      style={{ padding: "0.35rem 0.7rem", fontSize: "0.82rem" }}
+                      onClick={() => navigate(`/profile/${suggestion.id}`)}
+                    >
+                      Profile
+                    </button>
+                    {suggestion.requestStatus === "pending_sent" ? (
+                      <button
+                        type="button"
+                        className="secondary-button"
+                        style={{ padding: "0.35rem 0.7rem", fontSize: "0.82rem", color: "#dc2626" }}
+                        disabled={actionRequestId !== null}
+                        onClick={() => {
+                          const req = sentRequests.find((r) => r.senderDisplayName === suggestion.displayName);
+                          if (req) handleCancelRequest(req.id);
+                          else loadFriends(userId!);
+                        }}
+                      >
+                        Cancel request
+                      </button>
+                    ) : suggestion.requestStatus === "pending_received" ? (
+                      <button
+                        type="button"
+                        className="primary-button"
+                        style={{ padding: "0.35rem 0.7rem", fontSize: "0.82rem" }}
+                        disabled={actionRequestId !== null}
+                        onClick={() => {
+                          const req = pendingRequests.find((r) => r.senderId === suggestion.id);
+                          if (req) handleAcceptRequest(req.id);
+                        }}
+                      >
+                        Accept
+                      </button>
+                    ) : (
+                      <button
+                        type="button"
+                        className="primary-button"
+                        style={{ padding: "0.35rem 0.7rem", fontSize: "0.82rem" }}
+                        disabled={actionFriendId === suggestion.id}
+                        onClick={() => handleSendRequest(suggestion.id)}
+                      >
+                        {actionFriendId === suggestion.id ? "Sending…" : "Add friend"}
+                      </button>
+                    )}
+                  </div>
                 </div>
               ))}
             </div>

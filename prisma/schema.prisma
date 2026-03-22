@@ -50,6 +50,12 @@ enum ItemCategory {
   THEME
 }
 
+enum FriendRequestStatus {
+  PENDING
+  ACCEPTED
+  REJECTED
+}
+
 model User {
   id             String            @id @default(uuid())
   email          String            @unique
@@ -65,8 +71,24 @@ model User {
   userChallenges UserChallenge[]
   inventory      UserAvatarItem[]
   rewardEvents   RewardEvent[]
-  friendshipsA   Friendship[]      @relation("FriendshipUser")
-  friendshipsB   Friendship[]      @relation("FriendshipFriend")
+  friendshipsA    Friendship[]      @relation("FriendshipUser")
+  friendshipsB    Friendship[]      @relation("FriendshipFriend")
+  sentRequests    FriendRequest[]   @relation("SentRequests")
+  receivedRequests FriendRequest[]  @relation("ReceivedRequests")
+}
+
+model FriendRequest {
+  id         String              @id @default(uuid())
+  senderId   String
+  receiverId String
+  status     FriendRequestStatus @default(PENDING)
+  createdAt  DateTime            @default(now())
+  updatedAt  DateTime            @updatedAt
+  sender     User                @relation("SentRequests", fields: [senderId], references: [id], onDelete: Cascade)
+  receiver   User                @relation("ReceivedRequests", fields: [receiverId], references: [id], onDelete: Cascade)
+
+  @@unique([senderId, receiverId])
+  @@index([receiverId, status])
 }
 
 model Friendship {
