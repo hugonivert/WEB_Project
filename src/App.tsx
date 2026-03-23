@@ -1,13 +1,16 @@
-import { useEffect, useState } from "react";
+import { lazy, Suspense, useEffect, useState } from "react";
 import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
+import AppErrorBoundary from "./components/AppErrorBoundary";
 import AppLayout from "./layout/AppLayout";
 import LoginPage from "./pages/LoginPage";
 import PlannerPage from "./pages/PlannerPage";
 import PerformancePage from "./pages/PerformancePage";
 import SocialHubPage from "./pages/SocialHubPage";
-import AvatarPage from "./pages/AvatarPage";
 import ProfilePage from "./pages/ProfilePage";
 import { AUTH_STORAGE_KEY, isLoggedIn } from "./lib/auth";
+
+const AvatarPage = lazy(() => import("./pages/AvatarPage"));
+const AvatarEditPage = lazy(() => import("./pages/AvatarEditPage"));
 
 export default function App() {
   const [loggedIn, setLoggedIn] = useState<boolean>(() => isLoggedIn());
@@ -74,7 +77,25 @@ export default function App() {
           <Route
             path="/avatar"
             element={
-              loggedIn ? <AvatarPage /> : <Navigate to="/login" replace />
+              loggedIn ? (
+                <Suspense fallback={null}>
+                  <AvatarPage />
+                </Suspense>
+              ) : (
+                <Navigate to="/login" replace />
+              )
+            }
+          />
+          <Route
+            path="/avatar/edit"
+            element={
+              loggedIn ? (
+                <Suspense fallback={null}>
+                  <AvatarEditPage />
+                </Suspense>
+              ) : (
+                <Navigate to="/login" replace />
+              )
             }
           />
           <Route
