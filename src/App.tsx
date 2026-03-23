@@ -1,6 +1,5 @@
-import { lazy, Suspense, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
-import AppErrorBoundary from "./components/AppErrorBoundary";
 import AppLayout from "./layout/AppLayout";
 import LoginPage from "./pages/LoginPage";
 import PlannerPage from "./pages/PlannerPage";
@@ -9,9 +8,6 @@ import SocialHubPage from "./pages/SocialHubPage";
 import AvatarPage from "./pages/AvatarPage";
 import ProfilePage from "./pages/ProfilePage";
 import { AUTH_STORAGE_KEY, isLoggedIn } from "./lib/auth";
-
-const AvatarPage = lazy(() => import("./pages/AvatarPage"));
-const AvatarEditPage = lazy(() => import("./pages/AvatarEditPage"));
 
 export default function App() {
   const [loggedIn, setLoggedIn] = useState<boolean>(() => isLoggedIn());
