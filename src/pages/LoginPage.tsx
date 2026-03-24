@@ -148,20 +148,55 @@ export default function LoginPage() {
 
   return (
     <div className="login-shell">
+
+      {/* ── Left hero panel ── */}
+      <div className="login-hero">
+        <div className="login-hero-content">
+          <div className="login-hero-logo">
+            <div className="login-hero-logo-icon">FQ</div>
+            <span className="login-hero-brand">FitQuest</span>
+          </div>
+
+          <h1 className="login-hero-title">
+            Track. Train.<br />Conquer.
+          </h1>
+          <p className="login-hero-subtitle">
+            Your all-in-one fitness companion. Plan workouts, complete AI-powered missions, and climb the weekly leaderboard.
+          </p>
+
+          <div className="login-hero-stats">
+            <div className="login-hero-stat">
+              <span className="login-hero-stat-value">5+</span>
+              <span className="login-hero-stat-label">Sports tracked</span>
+            </div>
+            <div className="login-hero-stat">
+              <span className="login-hero-stat-value">AI</span>
+              <span className="login-hero-stat-label">Weekly missions</span>
+            </div>
+            <div className="login-hero-stat">
+              <span className="login-hero-stat-value">Live</span>
+              <span className="login-hero-stat-label">Leaderboard</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* ── Right form panel ── */}
+      <div className="login-form-col">
       <div className="login-panel">
         <div>
-          <p className="eyebrow"></p>
-          <h1 className="login-title">
-            {isSignup ? "FitQuest" : "FitQuest"}
-          </h1>
-          <p className="route-copy">
+          <p className="eyebrow">Welcome</p>
+          <h2 className="login-title">
+            {isSignup ? "Create account" : "Sign in"}
+          </h2>
+          <p className="route-copy" style={{ marginTop: 6 }}>
             {isSignup
-              ? "Create your account to access planning and performance stats."
-              : ""}
+              ? "Join FitQuest and start your journey."
+              : "Good to see you back. Let's get moving."}
           </p>
         </div>
 
-        <div className="login-actions" style={{ marginTop: 14 }}>
+        <div className="login-actions" style={{ marginTop: 18 }}>
           <button
             type="button"
             className={mode === "login" ? "primary-button" : "secondary-button"}
@@ -291,14 +326,7 @@ export default function LoginPage() {
           </div>
         </form>
 
-        {!isSignup ? (
-          <div className="section-card login-notes">
-            <h2 className="section-card-title">Note</h2>
-            <p className="section-card-copy">
-              If you do not have an account yet, use "Create an account".
-            </p>
-          </div>
-        ) : null}
+      </div>
       </div>
     </div>
   );

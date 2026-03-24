@@ -11,10 +11,10 @@ import { readAuthSession } from "../lib/auth";
 import { fetchLeaderboard } from "../api/social";
 
 const navigationItems = [
-  { to: "/planner", label: "Planner", icon: CalendarRange },
+  { to: "/planner",     label: "Planner",     icon: CalendarRange },
   { to: "/performance", label: "Performance", icon: Activity },
-  { to: "/social", label: "Social hub", icon: Newspaper },
-  { to: "/avatar", label: "Avatar", icon: UserCircle2 },
+  { to: "/social",      label: "Social hub",  icon: Newspaper },
+  { to: "/avatar",      label: "Avatar",      icon: UserCircle2 },
 ];
 
 function useLeaderboardPosition() {
@@ -47,18 +47,23 @@ function useLeaderboardPosition() {
 
 export default function AppLayout() {
   const { rank, points } = useLeaderboardPosition();
+
   return (
     <div className="app-shell">
       <aside className="app-sidebar">
-        <div>
-          <p className="sidebar-brand">FitQuest</p>
-          <h2 className="sidebar-title"></h2>
-          <p className="sidebar-copy">
-            Welcome to FitQuest, your fitness companion! Track your workouts, complete missions, and climb the weekly leaderboard. 
-          </p>
+
+        {/* Logo */}
+        <div className="sidebar-logo">
+          <div className="sidebar-logo-icon">FQ</div>
+          <div>
+            <p className="sidebar-brand">FitQuest</p>
+            <p className="sidebar-tagline">Your fitness journey</p>
+          </div>
         </div>
 
+        {/* Navigation */}
         <nav className="sidebar-nav">
+          <p className="sidebar-nav-label">Menu</p>
           {navigationItems.map((item) => {
             const Icon = item.icon;
             return (
@@ -76,6 +81,7 @@ export default function AppLayout() {
           })}
         </nav>
 
+        {/* Weekly leaderboard score */}
         <div className="sidebar-score-card">
           <div className="sidebar-score-row">
             <Trophy className="icon-sm" />
@@ -87,12 +93,13 @@ export default function AppLayout() {
             <strong>No points yet</strong>
           ) : (
             <strong>
-              {rank !== null ? `#${rank} – ` : ""}
+              {rank !== null ? `#${rank} · ` : ""}
               {points} pts
             </strong>
           )}
           <p className="sidebar-copy">Points earned from completed missions.</p>
         </div>
+
       </aside>
 
       <main className="app-main">
