@@ -2,7 +2,6 @@ type PageHeaderProps = {
   eyebrow?: string;
   title: string;
   description?: string;
-  /** Back-compat avec les anciennes pages */
   subtitle?: string;
   badge?: string;
 };
