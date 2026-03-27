@@ -38,13 +38,154 @@ const updateAvatarProfileSchema = z.object({
   avatarUrl: z.string().url(),
 });
 
-const trainingUnlockRules = [
+const physicalFieldIds = [
+  "style",
+  "backgroundColor",
+  "skinColor",
+  "top",
+  "hairColor",
+  "hatColor",
+  "eyes",
+  "eyebrows",
+  "mouth",
+  "facialHair",
+  "facialHairColor",
+] as const;
+
+const lockedAtSignupFieldIds = [
+  "accessories",
+  "accessoriesColor",
+  "clothing",
+  "clothesColor",
+  "clothingGraphic",
+] as const;
+
+const avatarUnlockRules = [
   {
-    id: "complete-5-30min-sessions",
-    title: "Starter training outfit",
-    description: "Complete 5 sport sessions lasting at least 30 minutes to unlock one clothing item.",
-    threshold: 5,
+    id: "clothing-shirt-crew-neck",
+    title: "Crew neck shirt",
+    description: "Unlock the crew neck shirt customization.",
+    thresholdKm: 25,
     rewardType: "CLOTHING",
+    field: "clothing",
+    value: "shirtCrewNeck",
+  },
+  {
+    id: "clothing-shirt-v-neck",
+    title: "V-neck shirt",
+    description: "Unlock the V-neck shirt customization.",
+    thresholdKm: 75,
+    rewardType: "CLOTHING",
+    field: "clothing",
+    value: "shirtVNeck",
+  },
+  {
+    id: "accessory-eyepatch",
+    title: "Eye patch",
+    description: "Unlock the eye patch accessory.",
+    thresholdKm: 100,
+    rewardType: "ACCESSORY",
+    field: "accessories",
+    value: "eyepatch",
+  },
+  {
+    id: "clothing-graphic-shirt",
+    title: "Graphic shirt",
+    description: "Unlock the graphic shirt outfit.",
+    thresholdKm: 200,
+    rewardType: "CLOTHING",
+    field: "clothing",
+    value: "graphicShirt",
+  },
+  {
+    id: "clothing-overall",
+    title: "Overall",
+    description: "Unlock the overall outfit.",
+    thresholdKm: 350,
+    rewardType: "CLOTHING",
+    field: "clothing",
+    value: "overall",
+  },
+  {
+    id: "accessory-round",
+    title: "Round glasses",
+    description: "Unlock the round glasses accessory.",
+    thresholdKm: 400,
+    rewardType: "ACCESSORY",
+    field: "accessories",
+    value: "round",
+  },
+  {
+    id: "clothing-blazer-shirt",
+    title: "Blazer and shirt",
+    description: "Unlock the blazer and shirt outfit.",
+    thresholdKm: 600,
+    rewardType: "CLOTHING",
+    field: "clothing",
+    value: "blazerAndShirt",
+  },
+  {
+    id: "accessory-wayfarers",
+    title: "Wayfarers",
+    description: "Unlock the wayfarers accessory.",
+    thresholdKm: 750,
+    rewardType: "ACCESSORY",
+    field: "accessories",
+    value: "wayfarers",
+  },
+  {
+    id: "accessory-sunglasses",
+    title: "Sunglasses",
+    description: "Unlock the sunglasses accessory.",
+    thresholdKm: 1000,
+    rewardType: "ACCESSORY",
+    field: "accessories",
+    value: "sunglasses",
+  },
+  {
+    id: "clothing-blazer-sweater",
+    title: "Blazer and sweater",
+    description: "Unlock the blazer and sweater outfit.",
+    thresholdKm: 1200,
+    rewardType: "CLOTHING",
+    field: "clothing",
+    value: "blazerAndSweater",
+  },
+  {
+    id: "accessory-prescription01",
+    title: "Prescription glasses 01",
+    description: "Unlock the first prescription glasses style.",
+    thresholdKm: 1400,
+    rewardType: "ACCESSORY",
+    field: "accessories",
+    value: "prescription01",
+  },
+  {
+    id: "clothing-collar-sweater",
+    title: "Collar and sweater",
+    description: "Unlock the collar and sweater outfit.",
+    thresholdKm: 1600,
+    rewardType: "CLOTHING",
+    field: "clothing",
+    value: "collarAndSweater",
+  },
+  {
+    id: "accessory-prescription02",
+    title: "Prescription glasses 02",
+    description: "Unlock the second prescription glasses style.",
+    thresholdKm: 1800,
+    rewardType: "ACCESSORY",
+    field: "accessories",
+    value: "prescription02",
+  },
+  {
+    id: "clothing-shirt-scoop-neck",
+    title: "Scoop neck shirt",
+    description: "Unlock the scoop neck shirt outfit.",
+    thresholdKm: 2000,
+    rewardType: "CLOTHING",
+    field: "clothing",
+    value: "shirtScoopNeck",
   },
 ] as const;
 
@@ -74,23 +215,39 @@ function getSessionDurationMinutes(startAt: Date | string, endAt: Date | string)
   return Math.max(0, Math.round((end - start) / 60000));
 }
 
-async function getSessionProgress(userId: string) {
+function roundDistance(value: number) {
+  return Math.round(value * 100) / 100;
+}
+
+function getDistanceKmFromCompletedData(completedData: Prisma.JsonValue | null | undefined) {
+  if (!completedData || typeof completedData !== "object" || Array.isArray(completedData)) {
+    return null;
+  }
+
+  const distanceKm = completedData.distanceKm;
+  return typeof distanceKm === "number" && Number.isFinite(distanceKm) ? distanceKm : null;
+}
+
+async function getRunningProgress(userId: string) {
   try {
     const sessions = await prisma.trainingSession.findMany({
       where: {
         userId,
         status: SessionStatus.COMPLETED,
+        sport: "RUNNING",
       },
       select: {
         startAt: true,
         endAt: true,
+        completedData: true,
       },
     });
 
     return {
-      qualifyingCompletedSessions: sessions.filter(
-        (session) => getSessionDurationMinutes(session.startAt, session.endAt) >= 30,
-      ).length,
+      completedRuns: sessions.length,
+      totalRunningKm: roundDistance(
+        sessions.reduce((sum, session) => sum + (getDistanceKmFromCompletedData(session.completedData) ?? 0), 0),
+      ),
     };
   } catch (error) {
     if (!canFallback(error)) {
@@ -99,12 +256,78 @@ async function getSessionProgress(userId: string) {
   }
 
   return {
-    qualifyingCompletedSessions: devSessionsStore.filter(
-      (session) =>
-        session.userId === userId &&
-        session.status === SessionStatus.COMPLETED &&
-        getSessionDurationMinutes(session.startAt, session.endAt) >= 30,
+    completedRuns: devSessionsStore.filter(
+      (session) => session.userId === userId && session.status === SessionStatus.COMPLETED && session.sport === "RUNNING",
     ).length,
+    totalRunningKm: roundDistance(
+      devSessionsStore.reduce((sum, session) => {
+        if (session.userId !== userId || session.status !== SessionStatus.COMPLETED || session.sport !== "RUNNING") {
+          return sum;
+        }
+
+        return sum + (getDistanceKmFromCompletedData(session.completedData as Prisma.JsonValue) ?? 0);
+      }, 0),
+    ),
+  };
+}
+
+function buildUnlockCatalog(totalRunningKm: number) {
+  const unlockedRules = avatarUnlockRules.filter((rule) => totalRunningKm >= rule.thresholdKm);
+  const nextUnlockRule =
+    avatarUnlockRules.find((rule) => totalRunningKm < rule.thresholdKm) ?? null;
+  const previousThresholdKm =
+    avatarUnlockRules
+      .filter((rule) => rule.thresholdKm <= totalRunningKm)
+      .reduce((max, rule) => Math.max(max, rule.thresholdKm), 0);
+
+  const unlockedAccessories = unlockedRules
+    .filter((rule) => rule.field === "accessories")
+    .map((rule) => rule.value);
+
+  const unlockedClothing = unlockedRules
+    .filter((rule) => rule.field === "clothing")
+    .map((rule) => rule.value);
+
+  const clothingUnlocked = unlockedClothing.length > 0;
+  const accessoriesUnlocked = unlockedAccessories.length > 0;
+
+  const nextUnlock = nextUnlockRule
+    ? {
+        id: nextUnlockRule.id,
+        title: nextUnlockRule.title,
+        description: nextUnlockRule.description,
+        rewardType: nextUnlockRule.rewardType,
+        thresholdKm: nextUnlockRule.thresholdKm,
+        currentKm: totalRunningKm,
+        previousThresholdKm,
+        remainingKm: roundDistance(Math.max(nextUnlockRule.thresholdKm - totalRunningKm, 0)),
+        progressPercent:
+          nextUnlockRule.thresholdKm === previousThresholdKm
+            ? 100
+            : Math.min(
+                ((totalRunningKm - previousThresholdKm) /
+                  (nextUnlockRule.thresholdKm - previousThresholdKm)) *
+                  100,
+                100,
+              ),
+      }
+    : null;
+
+  return {
+    totalRunningKm,
+    unlockedCount: unlockedRules.length,
+    nextUnlock,
+    availableOptions: {
+      accessories: ["blank", ...unlockedAccessories],
+      clothing: clothingUnlocked ? ["hoodie", ...unlockedClothing] : ["hoodie"],
+      clothesColor: clothingUnlocked ? "all" : "locked",
+      clothingGraphic: clothingUnlocked ? "all" : "locked",
+      accessoriesColor: accessoriesUnlocked ? "all" : "locked",
+    },
+    lockedFields: [
+      ...(accessoriesUnlocked ? [] : ["accessories", "accessoriesColor"]),
+      ...(clothingUnlocked ? [] : ["clothing", "clothesColor", "clothingGraphic"]),
+    ],
   };
 }
 
@@ -115,12 +338,14 @@ function buildAvatarProfile(
     avatarUrl: string | null;
     rewardEvents?: Array<{ points: number }>;
   },
-  sessionProgress: {
-    qualifyingCompletedSessions: number;
+  runningProgress: {
+    completedRuns: number;
+    totalRunningKm: number;
   },
 ) {
   const totalPoints = user.rewardEvents?.reduce((sum, event) => sum + event.points, 0) ?? 0;
   const level = Math.max(1, Math.floor(totalPoints / 500) + 1);
+  const unlockCatalog = buildUnlockCatalog(runningProgress.totalRunningKm);
 
   return {
     userId: user.id,
@@ -140,23 +365,29 @@ function buildAvatarProfile(
     },
     creatorPolicy: {
       targetMode: "in-app-2d-avatar",
-      allowedAtSignup: ["base-style", "colors", "hair", "face", "clothing", "accessories"],
-      lockedAtSignup: [],
+      allowedAtSignup: [...physicalFieldIds],
+      lockedAtSignup: [...lockedAtSignupFieldIds],
       providerConstraint:
         "Avataaars is rendered locally in the web app and stored as an SVG data URL on the user profile.",
     },
-    unlockProgress: trainingUnlockRules.map((rule) => ({
+    runningProgress: {
+      totalRunningKm: runningProgress.totalRunningKm,
+      completedRuns: runningProgress.completedRuns,
+    },
+    unlockCatalog,
+    unlockProgress: avatarUnlockRules.map((rule) => ({
       ...rule,
-      currentProgress: Math.min(sessionProgress.qualifyingCompletedSessions, rule.threshold),
-      qualifyingCompletedSessions: sessionProgress.qualifyingCompletedSessions,
-      unlockedCount: Math.floor(sessionProgress.qualifyingCompletedSessions / rule.threshold),
-      isUnlocked: sessionProgress.qualifyingCompletedSessions >= rule.threshold,
+      currentProgressKm: Math.min(runningProgress.totalRunningKm, rule.thresholdKm),
+      totalRunningKm: runningProgress.totalRunningKm,
+      completedRuns: runningProgress.completedRuns,
+      remainingKm: roundDistance(Math.max(rule.thresholdKm - runningProgress.totalRunningKm, 0)),
+      isUnlocked: runningProgress.totalRunningKm >= rule.thresholdKm,
     })),
   };
 }
 
 async function getAvatarProfile(userId: string) {
-  const sessionProgress = await getSessionProgress(userId);
+  const runningProgress = await getRunningProgress(userId);
 
   try {
     const user = await prisma.user.findUnique({
@@ -165,7 +396,7 @@ async function getAvatarProfile(userId: string) {
     });
 
     if (user) {
-      return buildAvatarProfile(user, sessionProgress);
+      return buildAvatarProfile(user, runningProgress);
     }
   } catch (error) {
     console.warn("Avatar profile lookup fell back to dev profile.", error);
@@ -177,7 +408,7 @@ async function getAvatarProfile(userId: string) {
       displayName: DEV_PROFILE.displayName,
       avatarUrl: DEV_PROFILE.avatarUrl,
       rewardEvents: [],
-    }, sessionProgress);
+    }, runningProgress);
   }
 
   return null;
@@ -242,20 +473,20 @@ avatarRouter.put("/profile", async (request, response) => {
       select: avatarProfileSelect,
     });
 
-    const sessionProgress = await getSessionProgress(payload.userId);
-    response.json(buildAvatarProfile(updatedUser, sessionProgress));
+    const runningProgress = await getRunningProgress(payload.userId);
+    response.json(buildAvatarProfile(updatedUser, runningProgress));
     return;
   } catch (error) {
     if (payload.userId === DEV_PROFILE.id) {
       DEV_PROFILE.avatarUrl = payload.avatarUrl;
-      const sessionProgress = await getSessionProgress(payload.userId);
+      const runningProgress = await getRunningProgress(payload.userId);
       response.json(
         buildAvatarProfile({
           id: DEV_PROFILE.id,
           displayName: DEV_PROFILE.displayName,
           avatarUrl: DEV_PROFILE.avatarUrl,
           rewardEvents: [],
-        }, sessionProgress),
+        }, runningProgress),
       );
       return;
     }

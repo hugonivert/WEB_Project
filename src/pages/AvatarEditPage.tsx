@@ -120,6 +120,7 @@ export default function AvatarEditPage() {
           <Suspense fallback={<p className="section-card-copy">Loading avatar editor...</p>}>
             <AvataaarsCreator
               initialAvatarUrl={avatarProfile?.avatarUrl ?? null}
+              avatarProfile={avatarProfile}
               isSaving={isSaving}
               onAvatarSaved={handleAvatarExported}
             />

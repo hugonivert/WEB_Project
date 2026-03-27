@@ -1,16 +1,16 @@
 import { useEffect, useState } from "react";
-import { useParams, useNavigate } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
 import PageHeader from "../components/PageHeader";
 import SectionCard from "../components/SectionCard";
-import { fetchUserProfile, type UserProfileDto, type SportType } from "../api/social";
+import { fetchUserProfile, type SportType, type UserProfileDto } from "../api/social";
 
 const SPORT_ICONS: Record<SportType, string> = {
-  RUNNING: "🏃",
-  GYM: "🏋️",
-  CYCLING: "🚴",
-  MOBILITY: "🧘",
-  SWIMMING: "🏊",
-  OTHER: "⚡",
+  RUNNING: "Runner",
+  GYM: "Gym",
+  CYCLING: "Bike",
+  MOBILITY: "Mobility",
+  SWIMMING: "Swim",
+  OTHER: "Sport",
 };
 
 function timeAgo(dateStr: string): string {
@@ -41,7 +41,7 @@ export default function ProfilePage() {
   if (loading) {
     return (
       <div className="route-shell">
-        <PageHeader title="Profile" subtitle="Loading…" />
+        <PageHeader eyebrow="Profile" title="Profile" description="Loading..." />
       </div>
     );
   }
@@ -49,12 +49,16 @@ export default function ProfilePage() {
   if (error || !profile) {
     return (
       <div className="route-shell">
-        <PageHeader title="Profile" subtitle="User not found" />
+        <PageHeader eyebrow="Profile" title="Profile" description="User not found" />
         <div className="section-card" style={{ marginTop: 16 }}>
           <p className="section-card-copy" style={{ color: "#dc2626" }}>
             {error ?? "This profile could not be loaded."}
           </p>
-          <button className="secondary-button" style={{ marginTop: 12 }} onClick={() => navigate(-1)}>
+          <button
+            className="secondary-button"
+            style={{ marginTop: 12 }}
+            onClick={() => navigate(-1)}
+          >
             Go back
           </button>
         </div>
@@ -65,8 +69,9 @@ export default function ProfilePage() {
   return (
     <div className="route-shell">
       <PageHeader
+        eyebrow="Profile"
         title={profile.displayName}
-        subtitle="Athlete profile"
+        description="Athlete profile"
       />
 
       <button
@@ -74,10 +79,9 @@ export default function ProfilePage() {
         style={{ marginBottom: 20 }}
         onClick={() => navigate(-1)}
       >
-        ← Back
+        Back
       </button>
 
-      {/* Identity card */}
       <SectionCard title="Overview">
         <div style={{ display: "flex", alignItems: "center", gap: 16, flexWrap: "wrap" }}>
           <div
@@ -101,59 +105,65 @@ export default function ProfilePage() {
                 style={{ width: "100%", height: "100%", objectFit: "cover" }}
               />
             ) : (
-              "👤"
+              "User"
             )}
           </div>
           <div>
             <p style={{ fontWeight: 700, fontSize: "1.1rem", margin: 0 }}>{profile.displayName}</p>
             <p style={{ margin: "4px 0 0", color: "#64748b", fontSize: "0.9rem" }}>
-              🏆 <strong>{profile.totalPoints}</strong> points this week
+              {profile.totalPoints} points this week
             </p>
           </div>
         </div>
       </SectionCard>
 
-      {/* Recent achievements */}
-      <SectionCard title="Recent achievements" style={{ marginTop: 16 }}>
-        {profile.recentAchievements.length === 0 ? (
-          <p className="section-card-copy">No completed missions yet.</p>
-        ) : (
-          <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-            {profile.recentAchievements.map((achievement) => (
-              <div
-                key={achievement.id}
-                className="mini-panel"
-                style={{ borderLeft: "3px solid #a855f7", display: "flex", alignItems: "flex-start", gap: 12 }}
-              >
-                <span style={{ fontSize: 22, flexShrink: 0 }}>
-                  {SPORT_ICONS[achievement.sport as SportType] ?? "⚡"}
-                </span>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <p style={{ margin: 0, fontWeight: 600, fontSize: "0.95rem" }}>
-                    {achievement.title}
-                  </p>
-                  <p style={{ margin: "2px 0 0", color: "#64748b", fontSize: "0.82rem" }}>
-                    +{achievement.rewardPoints} pts · {timeAgo(achievement.completedAt)}
-                  </p>
-                </div>
-                <span
+      <div style={{ marginTop: 16 }}>
+        <SectionCard title="Recent achievements">
+          {profile.recentAchievements.length === 0 ? (
+            <p className="section-card-copy">No completed missions yet.</p>
+          ) : (
+            <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+              {profile.recentAchievements.map((achievement) => (
+                <div
+                  key={achievement.id}
+                  className="mini-panel"
                   style={{
-                    flexShrink: 0,
-                    background: "#f3e8ff",
-                    color: "#7c3aed",
-                    borderRadius: 8,
-                    padding: "2px 8px",
-                    fontSize: "0.75rem",
-                    fontWeight: 600,
+                    borderLeft: "3px solid #a855f7",
+                    display: "flex",
+                    alignItems: "flex-start",
+                    gap: 12,
                   }}
                 >
-                  ✓ Done
-                </span>
-              </div>
-            ))}
-          </div>
-        )}
-      </SectionCard>
+                  <span style={{ fontSize: 12, flexShrink: 0, fontWeight: 700 }}>
+                    {SPORT_ICONS[achievement.sport as SportType] ?? "Sport"}
+                  </span>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <p style={{ margin: 0, fontWeight: 600, fontSize: "0.95rem" }}>
+                      {achievement.title}
+                    </p>
+                    <p style={{ margin: "2px 0 0", color: "#64748b", fontSize: "0.82rem" }}>
+                      +{achievement.rewardPoints} pts · {timeAgo(achievement.completedAt)}
+                    </p>
+                  </div>
+                  <span
+                    style={{
+                      flexShrink: 0,
+                      background: "#f3e8ff",
+                      color: "#7c3aed",
+                      borderRadius: 8,
+                      padding: "2px 8px",
+                      fontSize: "0.75rem",
+                      fontWeight: 600,
+                    }}
+                  >
+                    Done
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
+        </SectionCard>
+      </div>
     </div>
   );
 }

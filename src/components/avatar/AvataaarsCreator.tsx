@@ -9,9 +9,11 @@ import {
   renderAvataaarsSvg,
   type AvataaarsConfig,
 } from "./avataaars";
+import type { AvatarProfileDto } from "../../api/avatar";
 
 type AvataaarsCreatorProps = {
   initialAvatarUrl: string | null;
+  avatarProfile: AvatarProfileDto | null;
   isSaving: boolean;
   onAvatarSaved: (avatarUrl: string) => Promise<void>;
 };
@@ -40,22 +42,74 @@ const CONTROL_GROUPS: Array<{
 
 export default function AvataaarsCreator({
   initialAvatarUrl,
+  avatarProfile,
   isSaving,
   onAvatarSaved,
 }: AvataaarsCreatorProps) {
   const [config, setConfig] = useState<AvataaarsConfig>(DEFAULT_AVATAAARS_CONFIG);
 
+  const lockedFields = useMemo(
+    () => new Set<keyof AvataaarsConfig>((avatarProfile?.unlockCatalog.lockedFields ?? []) as Array<keyof AvataaarsConfig>),
+    [avatarProfile],
+  );
+
+  const availableFieldOptions = useMemo(
+    () =>
+      ({
+        accessories:
+          avatarProfile?.unlockCatalog.availableOptions.accessories ??
+          [...AVATAAARS_OPTIONS.accessories],
+        accessoriesColor:
+          avatarProfile?.unlockCatalog.availableOptions.accessoriesColor === "all"
+            ? [...AVATAAARS_OPTIONS.accessoriesColor]
+            : [DEFAULT_AVATAAARS_CONFIG.accessoriesColor],
+        clothing:
+          avatarProfile?.unlockCatalog.availableOptions.clothing ?? [...AVATAAARS_OPTIONS.clothing],
+        clothesColor:
+          avatarProfile?.unlockCatalog.availableOptions.clothesColor === "all"
+            ? [...AVATAAARS_OPTIONS.clothesColor]
+            : [DEFAULT_AVATAAARS_CONFIG.clothesColor],
+        clothingGraphic:
+          avatarProfile?.unlockCatalog.availableOptions.clothingGraphic === "all"
+            ? [...AVATAAARS_OPTIONS.clothingGraphic]
+            : [DEFAULT_AVATAAARS_CONFIG.clothingGraphic],
+      }) as Record<string, string[]>,
+    [avatarProfile],
+  );
+
+  function getOptionsForField(field: keyof AvataaarsConfig) {
+    return availableFieldOptions[field] ?? [...AVATAAARS_OPTIONS[field]];
+  }
+
+  function sanitizeConfig(nextConfig: AvataaarsConfig) {
+    const sanitized = { ...nextConfig } as Record<string, string>;
+
+    (Object.keys(availableFieldOptions) as Array<keyof AvataaarsConfig>).forEach((field) => {
+      const options = getOptionsForField(field);
+      const currentValue = sanitized[field] ?? "";
+      if (!options.includes(currentValue)) {
+        sanitized[field] = options[0] ?? DEFAULT_AVATAAARS_CONFIG[field];
+      }
+    });
+
+    return sanitized as AvataaarsConfig;
+  }
+
   useEffect(() => {
     const savedConfig = parseAvataaarsConfig(initialAvatarUrl);
     if (savedConfig) {
-      setConfig(savedConfig);
+      setConfig(sanitizeConfig(savedConfig));
       return;
     }
 
     if (!initialAvatarUrl) {
-      setConfig(DEFAULT_AVATAAARS_CONFIG);
+      setConfig(sanitizeConfig(DEFAULT_AVATAAARS_CONFIG));
     }
-  }, [initialAvatarUrl]);
+  }, [initialAvatarUrl, availableFieldOptions]);
+
+  useEffect(() => {
+    setConfig((current) => sanitizeConfig(current));
+  }, [availableFieldOptions]);
 
   const previewUrl = useMemo(() => {
     const svg = renderAvataaarsSvg(config);
@@ -67,6 +121,10 @@ export default function AvataaarsCreator({
   }
 
   function updateField<Key extends keyof AvataaarsConfig>(key: Key, value: AvataaarsConfig[Key]) {
+    if (lockedFields.has(key)) {
+      return;
+    }
+
     setConfig((current) => ({
       ...current,
       [key]: value,
@@ -84,14 +142,14 @@ export default function AvataaarsCreator({
           <button
             type="button"
             className="secondary-button"
-            onClick={() => setConfig(DEFAULT_AVATAAARS_CONFIG)}
+            onClick={() => setConfig(sanitizeConfig(DEFAULT_AVATAAARS_CONFIG))}
           >
             Reset
           </button>
           <button
             type="button"
             className="secondary-button"
-            onClick={() => setConfig(randomAvataaarsConfig())}
+            onClick={() => setConfig(sanitizeConfig(randomAvataaarsConfig()))}
           >
             Randomize
           </button>
@@ -113,6 +171,9 @@ export default function AvataaarsCreator({
             Pick the style you want and save it. The avatar is generated directly inside your site
             and stored on your profile as an SVG image.
           </p>
+          <p className="section-card-copy">
+            Accessories and outfits unlock only after you accumulate enough running kilometers.
+          </p>
         </div>
 
         {CONTROL_GROUPS.map((group) => (
@@ -126,16 +187,22 @@ export default function AvataaarsCreator({
                   <select
                     className="field-input"
                     value={config[field]}
+                    disabled={lockedFields.has(field)}
                     onChange={(event) =>
                       updateField(field, event.target.value as AvataaarsConfig[typeof field])
                     }
                   >
-                    {AVATAAARS_OPTIONS[field].map((option) => (
+                    {getOptionsForField(field).map((option: string) => (
                       <option key={option} value={option}>
                         {formatAvataaarsLabel(option)}
                       </option>
                     ))}
                   </select>
+                  {lockedFields.has(field) ? (
+                    <span className="avatar-lock-hint">
+                      Locked until you unlock more running rewards.
+                    </span>
+                  ) : null}
                 </label>
               ))}
             </div>

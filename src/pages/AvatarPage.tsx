@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import PageHeader from "../components/PageHeader";
 import SectionCard from "../components/SectionCard";
 import AvatarViewer from "../components/avatar/AvatarViewer";
+import AvatarUnlockProgressPanel from "../components/avatar/AvatarUnlockProgressPanel";
 import { fetchAvatarProfile, type AvatarProfileDto } from "../api/avatar";
 import { readAuthSession } from "../lib/auth";
 import type { PlannerProfile } from "../api/planner";
@@ -82,7 +83,7 @@ export default function AvatarPage() {
 
       {errorMessage ? <p className="avatar-error-text">{errorMessage}</p> : null}
 
-      <div className="route-grid route-grid-1">
+      <div className="route-grid route-grid-2">
         <SectionCard
           title=""
           description=""
@@ -104,6 +105,8 @@ export default function AvatarPage() {
             </Link>
           </div>
         </SectionCard>
+
+        <AvatarUnlockProgressPanel avatarProfile={avatarProfile} />
       </div>
     </div>
   );

@@ -20,15 +20,45 @@ export type AvatarProfileDto = {
     lockedAtSignup: string[];
     providerConstraint: string;
   };
+  runningProgress: {
+    totalRunningKm: number;
+    completedRuns: number;
+  };
+  unlockCatalog: {
+    totalRunningKm: number;
+    unlockedCount: number;
+    nextUnlock: {
+      id: string;
+      title: string;
+      description: string;
+      rewardType: string;
+      thresholdKm: number;
+      currentKm: number;
+      previousThresholdKm: number;
+      remainingKm: number;
+      progressPercent: number;
+    } | null;
+    availableOptions: {
+      accessories: string[];
+      clothing: string[];
+      clothesColor: "all" | "locked";
+      clothingGraphic: "all" | "locked";
+      accessoriesColor: "all" | "locked";
+    };
+    lockedFields: string[];
+  };
   unlockProgress: Array<{
     id: string;
     title: string;
     description: string;
-    threshold: number;
+    thresholdKm: number;
     rewardType: string;
-    currentProgress: number;
-    qualifyingCompletedSessions: number;
-    unlockedCount: number;
+    field: string;
+    value: string;
+    currentProgressKm: number;
+    totalRunningKm: number;
+    completedRuns: number;
+    remainingKm: number;
     isUnlocked: boolean;
   }>;
 };

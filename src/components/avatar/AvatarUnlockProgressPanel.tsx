@@ -8,40 +8,62 @@ type AvatarUnlockProgressPanelProps = {
 export default function AvatarUnlockProgressPanel({
   avatarProfile,
 }: AvatarUnlockProgressPanelProps) {
-  const primaryRule = avatarProfile?.unlockProgress[0] ?? null;
+  const nextUnlock = avatarProfile?.unlockCatalog.nextUnlock ?? null;
+  const unlockedRewards = avatarProfile?.unlockProgress.filter((rule) => rule.isUnlocked) ?? [];
 
   return (
     <SectionCard
       title="Unlock progression"
-      description="Cosmetic rewards are driven by sport activity rules, not by the base avatar creator."
+      description="Accessories and outfits are unlocked with your cumulative running distance."
     >
-      {primaryRule ? (
+      {avatarProfile ? (
         <div className="stack-sm">
           <div className="mini-panel">
-            <strong>{primaryRule.title}</strong>
-            <p className="section-card-copy">{primaryRule.description}</p>
+            <strong>{avatarProfile.runningProgress.totalRunningKm.toFixed(2)} km completed</strong>
+            <p className="section-card-copy">
+              {avatarProfile.runningProgress.completedRuns} validated run(s) counted for unlocks.
+            </p>
           </div>
 
-          <div className="avatar-progress-bar" aria-hidden="true">
-            <span
-              className="avatar-progress-fill"
-              style={{
-                width: `${Math.min((primaryRule.currentProgress / primaryRule.threshold) * 100, 100)}%`,
-              }}
-            />
-          </div>
+          {nextUnlock ? (
+            <>
+              <div className="mini-panel">
+                <strong>Next unlock: {nextUnlock.title}</strong>
+                <p className="section-card-copy">{nextUnlock.description}</p>
+                <p className="section-card-copy">
+                  {nextUnlock.remainingKm.toFixed(2)} km remaining before this{" "}
+                  {nextUnlock.rewardType === "ACCESSORY" ? "accessory" : "outfit"} unlocks.
+                </p>
+              </div>
 
-          <p className="metric-value metric-value-small">
-            {primaryRule.currentProgress}/{primaryRule.threshold}
-          </p>
-          <p className="section-card-copy">
-            Completed sessions over 30 minutes: {primaryRule.qualifyingCompletedSessions}
-          </p>
-          <p className="section-card-copy">
-            {primaryRule.isUnlocked
-              ? `Unlocked ${primaryRule.unlockedCount} clothing reward(s).`
-              : `${primaryRule.threshold - primaryRule.currentProgress} more qualifying session(s) needed.`}
-          </p>
+              <div className="avatar-progress-bar" aria-hidden="true">
+                <span
+                  className="avatar-progress-fill"
+                  style={{ width: `${Math.max(0, Math.min(nextUnlock.progressPercent, 100))}%` }}
+                />
+              </div>
+
+              <p className="metric-value metric-value-small">
+                {nextUnlock.currentKm.toFixed(2)} / {nextUnlock.thresholdKm} km
+              </p>
+            </>
+          ) : (
+            <div className="mini-panel">
+              <strong>Everything unlocked</strong>
+              <p className="section-card-copy">
+                You have unlocked all currently configured accessories and outfits.
+              </p>
+            </div>
+          )}
+
+          <div className="mini-panel">
+            <strong>Unlocked rewards</strong>
+            <p className="section-card-copy">
+              {unlockedRewards.length
+                ? unlockedRewards.map((rule) => rule.title).join(" · ")
+                : "No accessory or outfit unlocked yet. Your avatar keeps only the base physical customization for now."}
+            </p>
+          </div>
         </div>
       ) : (
         <p className="section-card-copy">No unlock rule configured yet.</p>
