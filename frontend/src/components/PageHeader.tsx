@@ -1,7 +1,8 @@
 type PageHeaderProps = {
-  eyebrow: string;
+  eyebrow?: string;
   title: string;
-  description: string;
+  description?: string;
+  subtitle?: string;
   badge?: string;
 };
 
@@ -9,14 +10,17 @@ export default function PageHeader({
   eyebrow,
   title,
   description,
+  subtitle,
   badge,
 }: PageHeaderProps) {
   return (
     <header className="route-header">
       <div>
-        <p className="eyebrow">{eyebrow}</p>
+        {eyebrow ? <p className="eyebrow">{eyebrow}</p> : null}
         <h1 className="route-title">{title}</h1>
-        <p className="route-copy">{description}</p>
+        {description || subtitle ? (
+          <p className="route-copy">{description ?? subtitle}</p>
+        ) : null}
       </div>
       {badge ? <div className="route-badge">{badge}</div> : null}
     </header>
